@@ -1,0 +1,287 @@
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from "@nestjs/common";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { SUPABASE_CLIENT } from "../../database/database.constants";
+import type { OtpRecord } from "../interfaces/otp-record.interface";
+
+interface OtpDatabaseRow {
+  id: string;
+  persona_id: string;
+  tienda_generacion_id: string;
+  tienda_redencion_id: string | null;
+  codigo_hash: string;
+  fecha_generacion: Date;
+  fecha_expiracion: Date;
+  fecha_redencion: Date | null;
+  valor_compra: number;
+  intentos: number;
+  estado: OtpRecord["estado"];
+  fecha_validacion: Date
+}
+
+export interface CreateOtpInput {
+  personId: string;
+  generationStoreId: string;
+  codeHash: string;
+  expiresAt: string;
+}
+
+export interface RedeemOtpInput {
+  otpId: string;
+  redemptionStoreId: string;
+  purchaseValue: number;
+  redeemedAt: string;
+}
+
+@Injectable()
+export class OtpRepository {
+  constructor(
+    @Inject(SUPABASE_CLIENT)
+    private readonly supabase: SupabaseClient,
+  ) {}
+
+  async invalidatePendingForPerson(
+    personId: string,
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .update({
+        estado: "ANULADO",
+      })
+      .eq("persona_id", personId)
+      .eq("estado", "PENDIENTE");
+
+    if (error) {
+      console.error("Error anulando OTP anteriores:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_INVALIDATION_FAILED",
+        message:
+          "No fue posible invalidar los códigos anteriores.",
+      });
+    }
+  }
+
+  async create(input: CreateOtpInput): Promise<OtpRecord> {
+    const { data, error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .insert({
+        persona_id: input.personId,
+        tienda_generacion_id:
+          input.generationStoreId,
+        codigo_hash: input.codeHash,
+        fecha_expiracion: input.expiresAt,
+        estado: "PENDIENTE",
+        intentos_validacion: 0,
+        fecha_generacion: new Date()
+      })
+      .select(`
+        id,
+        persona_id,
+        tienda_generacion_id,
+        tienda_redencion_id,
+        codigo_hash,
+        fecha_generacion,
+        fecha_expiracion,
+        fecha_redencion,
+        valor_compra,
+        intentos_validacion,
+        estado
+      `)
+      .single<OtpDatabaseRow>();
+
+    if (error || !data) {
+      console.error("Error creando OTP:", {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_CREATION_FAILED",
+        message: "No fue posible generar el código.",
+      });
+    }
+
+    return this.mapRow(data);
+  }
+
+  private mapRow(row: OtpDatabaseRow): OtpRecord {
+    return {
+      id: row.id,
+      persona_id: row.persona_id,
+      tienda_generacion_id: row.tienda_generacion_id,
+      tienda_redencion_id: row.tienda_redencion_id,
+      codigo_hash: row.codigo_hash,
+      fecha_generacion: row.fecha_generacion,
+      fecha_expiracion: row.fecha_expiracion,
+      fecha_redencion: row.fecha_redencion,
+      valor_compra: row.valor_compra,
+      intentos_validacion: row.intentos,
+      estado: row.estado,
+      fecha_validacion: row.fecha_validacion
+    };
+  }
+
+  async findLatestPendingByPersonId(
+    personId: string,
+  ): Promise<OtpRecord | null> {
+    const { data, error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .select(`
+        id,
+        persona_id,
+        tienda_generacion_id,
+        tienda_redencion_id,
+        codigo_hash,
+        fecha_generacion,
+        fecha_expiracion,
+        fecha_redencion,
+        valor_compra,
+        intentos_validacion,
+        estado
+      `)
+      .eq("persona_id", personId)
+      .eq("estado", "PENDIENTE")
+      .order("fecha_generacion", {
+        ascending: false,
+      })
+      .limit(1)
+      .maybeSingle<OtpDatabaseRow>();
+
+    if (error) {
+      console.error("Error consultando OTP pendiente:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_LOOKUP_FAILED",
+        message: "No fue posible consultar el código.",
+      });
+    }
+
+    return data ? this.mapRow(data) : null;
+  }
+
+  async incrementAttempts(
+    otpId: string,
+    currentAttempts: number,
+  ): Promise<number> {
+    const newAttempts = currentAttempts + 1;
+
+    const { error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .update({
+        intentos: newAttempts,
+      })
+      .eq("id", otpId)
+      .eq("estado", "PENDIENTE");
+
+    if (error) {
+      console.error("Error incrementando intentos del OTP:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_ATTEMPTS_UPDATE_FAILED",
+        message:
+          "No fue posible actualizar los intentos del código.",
+      });
+    }
+
+    return newAttempts;
+  }
+
+  async markExpired(otpId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .update({
+        estado: "EXPIRADO",
+      })
+      .eq("id", otpId)
+      .eq("estado", "PENDIENTE");
+
+    if (error) {
+      console.error("Error marcando OTP como expirado:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_EXPIRATION_UPDATE_FAILED",
+        message:
+          "No fue posible actualizar el estado del código.",
+      });
+    }
+  }
+
+  async markBlocked(otpId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .update({
+        estado: "BLOQUEADO",
+      })
+      .eq("id", otpId)
+      .eq("estado", "PENDIENTE");
+
+    if (error) {
+      console.error("Error bloqueando OTP:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_BLOCK_UPDATE_FAILED",
+        message:
+          "No fue posible bloquear el código.",
+      });
+    }
+  }
+
+  async markAsRedeemed(
+    input: RedeemOtpInput,
+  ): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .update({
+        estado: "REDIMIDO",
+        tienda_redencion_id: input.redemptionStoreId,
+        fecha_redencion: input.redeemedAt,
+        valor_compra: input.purchaseValue,
+      })
+      .eq("id", input.otpId)
+      .eq("estado", "PENDIENTE")
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error redimiendo OTP:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_REDEEM_FAILED",
+        message: "No fue posible redimir el código.",
+      });
+    }
+
+    return Boolean(data);
+  }
+}
