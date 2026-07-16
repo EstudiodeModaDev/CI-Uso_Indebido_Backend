@@ -11,14 +11,13 @@ async function bootstrap(): Promise<void> {
 
   const port = configService.getOrThrow<number>("app.port");
   const apiPrefix = configService.getOrThrow<string>("app.apiPrefix");
-  const frontendUrl = configService.getOrThrow<string>("app.frontendUrl");
 
   app.setGlobalPrefix(apiPrefix);
 
   app.use(helmet());
 
   app.enableCors({
-    origin: frontendUrl,
+    origin: "*",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
     credentials: true,
