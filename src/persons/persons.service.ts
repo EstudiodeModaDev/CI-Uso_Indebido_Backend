@@ -36,10 +36,10 @@ export class PersonsService {
       id: person.id,
       tipo_documento: person.documentType,
       numero_documento: person.document,
-      nombres: person.fullName,
+      nombres: person.nombre,
       correo: person.email ?? "",
       telefono: person.phone ?? "",
-      apellidos: person.personType,
+      apellidos: person.apellidos,
       estado: person.status,
       origen: ""
     };

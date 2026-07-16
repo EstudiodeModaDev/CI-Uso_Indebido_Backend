@@ -6,10 +6,10 @@ export interface Person {
   id: string;
   documentType: string;
   document: string;
-  fullName: string;
+  nombre: string;
   email: string | null;
   phone: string | null;
-  personType: "EMPLEADO" | "SOCIO";
+  apellidos: string;
   status: "ACTIVO" | "INACTIVO";
 }
 
@@ -22,6 +22,9 @@ interface PersonDatabaseRow {
   telefono: string | null;
   tipo_persona: "EMPLEADO" | "SOCIO";
   estado: "ACTIVO" | "INACTIVO";
+  nombres: string
+  apellidos: string,
+  origen: string
 }
 
 @Injectable()
@@ -70,10 +73,10 @@ export class PersonsRepository {
       id: data.id,
       documentType: data.tipo_documento,
       document: data.documento,
-      fullName: data.nombre_completo,
+      apellidos: data.nombre_completo,
       email: data.correo,
       phone: data.telefono,
-      personType: data.tipo_persona,
+      nombre: data.apellidos,
       status: data.estado,
     };
   }

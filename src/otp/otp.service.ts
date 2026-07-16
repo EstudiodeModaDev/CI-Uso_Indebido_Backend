@@ -98,7 +98,7 @@ export class OtpService {
       to: [person.correo],
       subject: "Código de autorización de descuento",
       html: this.buildOtpEmail({
-        fullName: person.nombres + person.apellidos,
+        fullName: person.nombres + " " + person.apellidos,
         code: otpCode,
         expirationMinutes,
         storeName: store.name,
