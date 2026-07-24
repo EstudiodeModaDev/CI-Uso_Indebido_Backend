@@ -43,7 +43,10 @@ export interface RedeemOtpResponse {
 export interface OtpHistoryItemResponse {
   id: string;
   code: string | null;
-  status: "REDIMIDO" | "EXPIRADO";
+  status:
+    | "REDIMIDO"
+    | "EXPIRADO"
+    | "ANULADO";
   generatedAt: string;
   expiresAt: string;
   redeemedAt: string | null;
@@ -601,7 +604,8 @@ export class OtpService {
       ),
       status: otp.estado as
         | "REDIMIDO"
-        | "EXPIRADO",
+        | "EXPIRADO"
+        | "ANULADO",
       generatedAt: String(otp.fecha_generacion),
       expiresAt: String(otp.fecha_expiracion),
       redeemedAt: otp.fecha_redencion

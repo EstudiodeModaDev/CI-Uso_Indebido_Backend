@@ -200,7 +200,11 @@ export class OtpRepository {
         fecha_validacion
       `)
       .eq("persona_id", personId)
-      .in("estado", ["REDIMIDO", "EXPIRADO"])
+      .in("estado", [
+        "REDIMIDO",
+        "EXPIRADO",
+        "ANULADO",
+      ])
       .order("fecha_generacion", {
         ascending: false,
       });
