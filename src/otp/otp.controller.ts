@@ -12,6 +12,7 @@ import { ValidateOtpDto } from "./dto/validate-otp.dto";
 import { RedeemOtpDto } from "./dto/redeem-otp.dto";
 import { OtpHistoryDto } from "./dto/otp-history.dto";
 import { Public } from "src/common/decorators/public.decorator";
+import { PublicOtpHistoryDto } from "./dto/public-otp-history.dto";
 
 @Controller("otp")
 export class OtpController {
@@ -60,6 +61,17 @@ export class OtpController {
   @Public()
   @Post("history")
   history(
+    @Body() dto: PublicOtpHistoryDto,
+  ) {
+    return this.otpService.historyPublic(
+      dto.document,
+      dto.email,
+    );
+  }
+
+  @Roles("TIENDA")
+  @Post("history/internal")
+  historyInternal(
     @Body() dto: OtpHistoryDto,
     @CurrentUser() user: CurrentUserType,
   ) {

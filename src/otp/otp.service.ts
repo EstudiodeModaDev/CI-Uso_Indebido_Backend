@@ -500,22 +500,53 @@ export class OtpService {
         person.id,
       );
 
-    return otps.map((otp) => ({
-      id: otp.id,
-      code: this.decryptStoredCode(
-        otp.codigo_encriptado,
-        encryptionKey,
-      ),
-      status: otp.estado as
-        | "REDIMIDO"
-        | "EXPIRADO",
-      generatedAt: String(otp.fecha_generacion),
-      expiresAt: String(otp.fecha_expiracion),
-      redeemedAt: otp.fecha_redencion
-        ? String(otp.fecha_redencion)
-        : null,
-      purchaseValue: otp.valor_compra,
-    }));
+    return this.buildHistoryResponse(
+      otps,
+      encryptionKey,
+    );
+  }
+
+  async historyPublic(
+    document: string,
+    email: string,
+  ): Promise<OtpHistoryItemResponse[]> {
+    const person =
+      await this.personsService.findActiveByDocument(
+        document,
+      );
+
+    const normalizedEmail = email
+      .trim()
+      .toLowerCase();
+    const registeredEmail = person.correo
+      .trim()
+      .toLowerCase();
+
+    if (
+      !registeredEmail ||
+      registeredEmail !== normalizedEmail
+    ) {
+      throw new NotFoundException({
+        code: "OTP_HISTORY_NOT_FOUND",
+        message:
+          "No se encontro historial para los datos suministrados.",
+      });
+    }
+
+    const encryptionKey =
+      this.configService.getOrThrow<string>(
+        "otp.encryptionKey",
+      );
+
+    const otps =
+      await this.otpRepository.findHistoryByPersonId(
+        person.id,
+      );
+
+    return this.buildHistoryResponse(
+      otps,
+      encryptionKey,
+    );
   }
 
   private decryptStoredCode(
@@ -543,5 +574,40 @@ export class OtpService {
           "No fue posible descifrar el cÃ³digo almacenado.",
       });
     }
+  }
+
+  private buildHistoryResponse(
+    otps: {
+      id: string;
+      codigo_encriptado: string | null;
+      estado:
+        | "PENDIENTE"
+        | "REDIMIDO"
+        | "EXPIRADO"
+        | "ANULADO"
+        | "BLOQUEADO";
+      fecha_generacion: Date;
+      fecha_expiracion: Date;
+      fecha_redencion: Date | null;
+      valor_compra: number;
+    }[],
+    encryptionKey: string,
+  ): OtpHistoryItemResponse[] {
+    return otps.map((otp) => ({
+      id: otp.id,
+      code: this.decryptStoredCode(
+        otp.codigo_encriptado,
+        encryptionKey,
+      ),
+      status: otp.estado as
+        | "REDIMIDO"
+        | "EXPIRADO",
+      generatedAt: String(otp.fecha_generacion),
+      expiresAt: String(otp.fecha_expiracion),
+      redeemedAt: otp.fecha_redencion
+        ? String(otp.fecha_redencion)
+        : null,
+      purchaseValue: otp.valor_compra,
+    }));
   }
 }
