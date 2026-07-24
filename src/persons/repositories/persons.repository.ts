@@ -20,7 +20,6 @@ interface PersonDatabaseRow {
   nombre_completo: string;
   correo: string | null;
   telefono: string | null;
-  tipo_persona: "EMPLEADO" | "SOCIO";
   estado: "ACTIVO" | "INACTIVO";
   nombres: string
   apellidos: string,
@@ -45,7 +44,6 @@ export class PersonsRepository {
         apellidos,
         correo,
         telefono,
-        tipo_persona,
         estado
       `)
       .eq("numero_documento", document)
