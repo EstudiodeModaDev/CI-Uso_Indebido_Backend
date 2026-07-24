@@ -57,7 +57,7 @@ export class OtpController {
     );
   }
 
-  @Roles("TIENDA", "EMPLEADO", "SOCIO", "CONTROL_INTERNO")
+  @Public()
   @Post("history")
   history(
     @Body() dto: OtpHistoryDto,
