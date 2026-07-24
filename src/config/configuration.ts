@@ -13,6 +13,7 @@ export interface AppConfiguration {
 
   otp: {
     secret: string;
+    encryptionKey: string;
     expirationMinutes: number;
     maxAttempts: number;
   };
@@ -45,6 +46,8 @@ export default (): AppConfiguration => ({
 
   otp: {
     secret: process.env.OTP_SECRET ?? "",
+    encryptionKey:
+      process.env.OTP_ENCRYPTION_KEY ?? "",
     expirationMinutes: Number(
       process.env.OTP_EXPIRATION_MINUTES ?? 5,
     ),

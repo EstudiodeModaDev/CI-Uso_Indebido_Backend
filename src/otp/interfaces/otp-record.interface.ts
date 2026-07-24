@@ -11,6 +11,7 @@ export interface OtpRecord {
   tienda_generacion_id: string;
   tienda_redencion_id: string | null;
   codigo_hash: string;
+  codigo_encriptado: string | null;
   estado: OtpStatus;
   fecha_generacion: Date;
   fecha_expiracion: Date;

@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -10,7 +11,13 @@ import type { CurrentUser } from "../common/types/current-user.type";
 import { EmailsService } from "../emails/emails.service";
 import { PersonsService } from "../persons/persons.service";
 import { StoresService } from "../stores/stores.service";
-import { generateOtpCode, hashOtpCode, compareOtpCode} from "./otp.crypto";
+import {
+  compareOtpCode,
+  decryptOtpCode,
+  encryptOtpCode,
+  generateOtpCode,
+  hashOtpCode,
+} from "./otp.crypto";
 import { OtpRepository } from "./repositories/otp.repository";
 import { AuditService } from "../audit/audit.service";
 
@@ -23,7 +30,7 @@ export interface GenerateOtpResponse {
 }
 
 export interface ValidateOtpResponse {
-  valid: true;
+  valid: boolean;
   remainingAttempts: number;
   expiresAt: string;
 }
@@ -31,6 +38,16 @@ export interface ValidateOtpResponse {
 export interface RedeemOtpResponse {
   success: true;
   redeemedAt: string;
+}
+
+export interface OtpHistoryItemResponse {
+  id: string;
+  code: string | null;
+  status: "REDIMIDO" | "EXPIRADO";
+  generatedAt: string;
+  expiresAt: string;
+  redeemedAt: string | null;
+  purchaseValue: number;
 }
 
 @Injectable()
@@ -65,6 +82,10 @@ export class OtpService {
     const otpCode = generateOtpCode();
 
     const secret = this.configService.getOrThrow<string>("otp.secret",);
+    const encryptionKey =
+      this.configService.getOrThrow<string>(
+        "otp.encryptionKey",
+      );
 
     const expirationMinutes =
       this.configService.getOrThrow<number>(
@@ -79,11 +100,16 @@ export class OtpService {
       otpCode,
       secret,
     );
+    const encryptedCode = encryptOtpCode(
+      otpCode,
+      encryptionKey,
+    );
 
     const otp = await this.otpRepository.create({
       personId: person.id,
       generationStoreId: store.id,
       codeHash,
+      encryptedCode,
       expiresAt: expiresAt.toISOString(),
     });
 
@@ -449,5 +475,73 @@ export class OtpService {
       success: true,
       redeemedAt,
     };
+  }
+
+  async history(
+    document: string,
+    currentUser: CurrentUser,
+  ): Promise<OtpHistoryItemResponse[]> {
+    await this.storesService.resolveCurrentStore(
+      currentUser,
+    );
+
+    const person =
+      await this.personsService.findActiveByDocument(
+        document,
+      );
+
+    const encryptionKey =
+      this.configService.getOrThrow<string>(
+        "otp.encryptionKey",
+      );
+
+    const otps =
+      await this.otpRepository.findHistoryByPersonId(
+        person.id,
+      );
+
+    return otps.map((otp) => ({
+      id: otp.id,
+      code: this.decryptStoredCode(
+        otp.codigo_encriptado,
+        encryptionKey,
+      ),
+      status: otp.estado as
+        | "REDIMIDO"
+        | "EXPIRADO",
+      generatedAt: String(otp.fecha_generacion),
+      expiresAt: String(otp.fecha_expiracion),
+      redeemedAt: otp.fecha_redencion
+        ? String(otp.fecha_redencion)
+        : null,
+      purchaseValue: otp.valor_compra,
+    }));
+  }
+
+  private decryptStoredCode(
+    encryptedCode: string | null,
+    encryptionKey: string,
+  ): string | null {
+    if (!encryptedCode) {
+      return null;
+    }
+
+    try {
+      return decryptOtpCode(
+        encryptedCode,
+        encryptionKey,
+      );
+    } catch (error) {
+      console.error(
+        "Error descifrando OTP almacenado:",
+        error,
+      );
+
+      throw new InternalServerErrorException({
+        code: "OTP_DECRYPT_FAILED",
+        message:
+          "No fue posible descifrar el cÃ³digo almacenado.",
+      });
+    }
   }
 }

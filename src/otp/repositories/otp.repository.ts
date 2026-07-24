@@ -13,19 +13,21 @@ interface OtpDatabaseRow {
   tienda_generacion_id: string;
   tienda_redencion_id: string | null;
   codigo_hash: string;
+  codigo_encriptado: string | null;
   fecha_generacion: Date;
   fecha_expiracion: Date;
   fecha_redencion: Date | null;
   valor_compra: number;
-  intentos: number;
+  intentos_validacion: number;
   estado: OtpRecord["estado"];
-  fecha_validacion: Date
+  fecha_validacion: Date | null;
 }
 
 export interface CreateOtpInput {
   personId: string;
   generationStoreId: string;
   codeHash: string;
+  encryptedCode: string;
   expiresAt: string;
 }
 
@@ -77,6 +79,7 @@ export class OtpRepository {
         tienda_generacion_id:
           input.generationStoreId,
         codigo_hash: input.codeHash,
+        codigo_encriptado: input.encryptedCode,
         fecha_expiracion: input.expiresAt,
         estado: "PENDIENTE",
         intentos_validacion: 0,
@@ -88,6 +91,7 @@ export class OtpRepository {
         tienda_generacion_id,
         tienda_redencion_id,
         codigo_hash,
+        codigo_encriptado,
         fecha_generacion,
         fecha_expiracion,
         fecha_redencion,
@@ -120,11 +124,12 @@ export class OtpRepository {
       tienda_generacion_id: row.tienda_generacion_id,
       tienda_redencion_id: row.tienda_redencion_id,
       codigo_hash: row.codigo_hash,
+      codigo_encriptado: row.codigo_encriptado,
       fecha_generacion: row.fecha_generacion,
       fecha_expiracion: row.fecha_expiracion,
       fecha_redencion: row.fecha_redencion,
       valor_compra: row.valor_compra,
-      intentos_validacion: row.intentos,
+      intentos_validacion: row.intentos_validacion,
       estado: row.estado,
       fecha_validacion: row.fecha_validacion
     };
@@ -141,6 +146,7 @@ export class OtpRepository {
         tienda_generacion_id,
         tienda_redencion_id,
         codigo_hash,
+        codigo_encriptado,
         fecha_generacion,
         fecha_expiracion,
         fecha_redencion,
@@ -171,6 +177,52 @@ export class OtpRepository {
     }
 
     return data ? this.mapRow(data) : null;
+  }
+
+  async findHistoryByPersonId(
+    personId: string,
+  ): Promise<OtpRecord[]> {
+    const { data, error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .select(`
+        id,
+        persona_id,
+        tienda_generacion_id,
+        tienda_redencion_id,
+        codigo_hash,
+        codigo_encriptado,
+        fecha_generacion,
+        fecha_expiracion,
+        fecha_redencion,
+        valor_compra,
+        intentos_validacion,
+        estado,
+        fecha_validacion
+      `)
+      .eq("persona_id", personId)
+      .in("estado", ["REDIMIDO", "EXPIRADO"])
+      .order("fecha_generacion", {
+        ascending: false,
+      });
+
+    if (error) {
+      console.error("Error consultando historial OTP:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_HISTORY_LOOKUP_FAILED",
+        message:
+          "No fue posible consultar el historial de cÃ³digos.",
+      });
+    }
+
+    return (data ?? []).map((row) =>
+      this.mapRow(row as OtpDatabaseRow),
+    );
   }
 
   async incrementAttempts(

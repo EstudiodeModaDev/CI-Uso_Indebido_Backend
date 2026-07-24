@@ -10,6 +10,7 @@ import { GenerateOtpDto } from "./dto/generate-otp-dto";
 import { Roles } from "src/common/decorators/roles.decorartor";
 import { ValidateOtpDto } from "./dto/validate-otp.dto";
 import { RedeemOtpDto } from "./dto/redeem-otp.dto";
+import { OtpHistoryDto } from "./dto/otp-history.dto";
 
 @Controller("otp")
 export class OtpController {
@@ -51,6 +52,18 @@ export class OtpController {
       dto.document,
       dto.code,
       dto.purchaseValue,
+      user,
+    );
+  }
+
+  @Roles("TIENDA")
+  @Post("history")
+  history(
+    @Body() dto: OtpHistoryDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.otpService.history(
+      dto.document,
       user,
     );
   }

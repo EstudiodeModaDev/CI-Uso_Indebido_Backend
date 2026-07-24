@@ -16,6 +16,10 @@ export const envValidationSchema = Joi.object({
   SUPABASE_SECRET_KEY: Joi.string().min(20).required(),
 
   OTP_SECRET: Joi.string().min(32).required(),
+  OTP_ENCRYPTION_KEY: Joi.string()
+    .length(64)
+    .pattern(/^[0-9a-fA-F]+$/)
+    .required(),
   OTP_EXPIRATION_MINUTES: Joi.number()
     .integer()
     .min(1)
