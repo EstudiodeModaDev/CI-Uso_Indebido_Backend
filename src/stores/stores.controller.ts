@@ -10,7 +10,6 @@ export class StoresController {
     private readonly storesService: StoresService,
   ) {}
 
-  @Roles("TIENDA")
   @Get("me")
   async getCurrentStore(
     @CurrentUser() user: CurrentUserType,

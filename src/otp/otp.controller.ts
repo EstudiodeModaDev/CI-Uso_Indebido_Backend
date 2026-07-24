@@ -11,6 +11,7 @@ import { Roles } from "src/common/decorators/roles.decorartor";
 import { ValidateOtpDto } from "./dto/validate-otp.dto";
 import { RedeemOtpDto } from "./dto/redeem-otp.dto";
 import { OtpHistoryDto } from "./dto/otp-history.dto";
+import { Public } from "src/common/decorators/public.decorator";
 
 @Controller("otp")
 export class OtpController {
@@ -56,7 +57,7 @@ export class OtpController {
     );
   }
 
-  @Roles("TIENDA")
+  @Public()
   @Post("history")
   history(
     @Body() dto: OtpHistoryDto,
