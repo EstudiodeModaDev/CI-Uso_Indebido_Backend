@@ -44,4 +44,14 @@ export class StoresService {
 
     return store;
   }
+
+  async findNamesByIds(
+    ids: number[],
+  ): Promise<Map<number, string>> {
+    const uniqueIds = [...new Set(ids)];
+
+    return this.storesRepository.findNamesByIds(
+      uniqueIds,
+    );
+  }
 }

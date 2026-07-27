@@ -1,7 +1,7 @@
 export interface Store {
-  id: string;
+  id: number;
   name: string;
   code: string | null;
   email: string;
-  status: "ACTIVA" | "INACTIVA";
+  status: boolean | null;
 }

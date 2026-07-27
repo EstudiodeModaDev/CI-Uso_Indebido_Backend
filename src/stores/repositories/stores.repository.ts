@@ -8,11 +8,11 @@ import { SUPABASE_CLIENT } from "../../database/database.constants";
 import type { Store } from "../interfaces/store.interface";
 
 interface StoreDatabaseRow {
-  id: string;
+  id: number;
   nombre: string;
-  codigo: string | null;
-  correo: string;
-  activo: "ACTIVA" | "INACTIVA";
+  codigo?: string | null;
+  correo: string | null;
+  activo: boolean | null;
 }
 
 @Injectable()
@@ -58,9 +58,49 @@ export class StoresRepository {
     return {
       id: data.id,
       name: data.nombre,
-      code: data.codigo,
-      email: data.correo,
+      code: data.codigo ?? null,
+      email: data.correo ?? "",
       status: data.activo,
     };
+  }
+
+  async findNamesByIds(
+    ids: number[],
+  ): Promise<Map<number, string>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const { data, error } = await this.supabase
+      .from("TIENDAS")
+      .select(`
+        id,
+        nombre
+      `)
+      .in("id", ids);
+
+    if (error) {
+      console.error("Error consultando nombres de tiendas:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      throw new InternalServerErrorException({
+        code: "STORE_NAMES_LOOKUP_FAILED",
+        message:
+          "No fue posible consultar los nombres de las tiendas.",
+      });
+    }
+
+    return new Map(
+      (data ?? []).flatMap((store) =>
+        typeof store.id === "number" &&
+        typeof store.nombre === "string"
+          ? [[store.id, store.nombre] as const]
+          : [],
+      ),
+    );
   }
 }

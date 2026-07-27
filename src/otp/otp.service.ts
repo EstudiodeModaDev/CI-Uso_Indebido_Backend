@@ -19,6 +19,7 @@ import {
   hashOtpCode,
 } from "./otp.crypto";
 import { OtpRepository } from "./repositories/otp.repository";
+import type { OtpHistoryRecord } from "./repositories/otp.repository";
 import { AuditService } from "../audit/audit.service";
 
 
@@ -51,6 +52,8 @@ export interface OtpHistoryItemResponse {
   expiresAt: string;
   redeemedAt: string | null;
   purchaseValue: number;
+  generateIn: string;
+  redeemIn: string | null;
 }
 
 @Injectable()
@@ -579,23 +582,22 @@ export class OtpService {
     }
   }
 
-  private buildHistoryResponse(
-    otps: {
-      id: string;
-      codigo_encriptado: string | null;
-      estado:
-        | "PENDIENTE"
-        | "REDIMIDO"
-        | "EXPIRADO"
-        | "ANULADO"
-        | "BLOQUEADO";
-      fecha_generacion: Date;
-      fecha_expiracion: Date;
-      fecha_redencion: Date | null;
-      valor_compra: number;
-    }[],
+  private async buildHistoryResponse(
+    otps: OtpHistoryRecord[],
     encryptionKey: string,
-  ): OtpHistoryItemResponse[] {
+  ): Promise<OtpHistoryItemResponse[]> {
+    const storeNames =
+      await this.storesService.findNamesByIds(
+        otps.flatMap((otp) =>
+          otp.tienda_redencion_id === null
+            ? [otp.tienda_generacion_id]
+            : [
+                otp.tienda_generacion_id,
+                otp.tienda_redencion_id,
+              ],
+        ),
+      );
+
     return otps.map((otp) => ({
       id: otp.id,
       code: this.decryptStoredCode(
@@ -612,6 +614,13 @@ export class OtpService {
         ? String(otp.fecha_redencion)
         : null,
       purchaseValue: otp.valor_compra,
+      generateIn:
+        storeNames.get(otp.tienda_generacion_id) ?? "",
+      redeemIn:
+        otp.tienda_redencion_id === null
+          ? null
+          : storeNames.get(otp.tienda_redencion_id) ??
+            null,
     }));
   }
 }

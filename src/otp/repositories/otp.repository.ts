@@ -10,8 +10,8 @@ import type { OtpRecord } from "../interfaces/otp-record.interface";
 interface OtpDatabaseRow {
   id: string;
   persona_id: string;
-  tienda_generacion_id: string;
-  tienda_redencion_id: string | null;
+  tienda_generacion_id: number;
+  tienda_redencion_id: number | null;
   codigo_hash: string;
   codigo_encriptado: string | null;
   fecha_generacion: Date;
@@ -25,7 +25,7 @@ interface OtpDatabaseRow {
 
 export interface CreateOtpInput {
   personId: string;
-  generationStoreId: string;
+  generationStoreId: number;
   codeHash: string;
   encryptedCode: string;
   expiresAt: string;
@@ -33,9 +33,14 @@ export interface CreateOtpInput {
 
 export interface RedeemOtpInput {
   otpId: string;
-  redemptionStoreId: string;
+  redemptionStoreId: number;
   purchaseValue: number;
   redeemedAt: string;
+}
+
+export interface OtpHistoryRecord extends OtpRecord {
+  tienda_generacion_nombre?: string | null;
+  tienda_redencion_nombre?: string | null;
 }
 
 @Injectable()
@@ -181,7 +186,7 @@ export class OtpRepository {
 
   async findHistoryByPersonId(
     personId: string,
-  ): Promise<OtpRecord[]> {
+  ): Promise<OtpHistoryRecord[]> {
     const { data, error } = await this.supabase
       .from("CODIGOS_OTP")
       .select(`
@@ -210,7 +215,7 @@ export class OtpRepository {
       });
 
     if (error) {
-      console.error("Error consultando historial OTP:", {
+      console.error("Error consultando historial OTP:" + error.message, {
         message: error.message,
         code: error.code,
         details: error.details,

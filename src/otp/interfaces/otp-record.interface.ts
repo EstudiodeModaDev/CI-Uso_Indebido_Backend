@@ -8,8 +8,8 @@ export type OtpStatus =
 export interface OtpRecord {
   id: string;
   persona_id: string;
-  tienda_generacion_id: string;
-  tienda_redencion_id: string | null;
+  tienda_generacion_id: number;
+  tienda_redencion_id: number | null;
   codigo_hash: string;
   codigo_encriptado: string | null;
   estado: OtpStatus;
