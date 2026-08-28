@@ -55,6 +55,7 @@ export class OtpController {
       dto.code,
       dto.purchaseValue,
       user,
+      dto.invoiceNumber
     );
   }
 

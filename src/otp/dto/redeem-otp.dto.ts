@@ -5,4 +5,7 @@ export class RedeemOtpDto extends ValidateOtpDto {
   @IsNumber()
   @Min(0.01)
   purchaseValue!: number;
+
+  @IsNumber()
+  invoiceNumber!: number;
 }

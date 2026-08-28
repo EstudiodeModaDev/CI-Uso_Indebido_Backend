@@ -54,6 +54,7 @@ export interface OtpHistoryItemResponse {
   purchaseValue: number;
   generateIn: string;
   redeemIn: string | null;
+  invoiceNumber: number | null;
 }
 
 @Injectable()
@@ -360,6 +361,7 @@ export class OtpService {
     code: string,
     purchaseValue: number,
     currentUser: CurrentUser,
+    invoiceNumber: number
   ): Promise<RedeemOtpResponse> {
     const store =
       await this.storesService.resolveCurrentStore(
@@ -459,6 +461,7 @@ export class OtpService {
         redemptionStoreId: store.id,
         purchaseValue,
         redeemedAt,
+        invoiceNumber
       });
 
     await this.auditService.success(
@@ -621,6 +624,7 @@ export class OtpService {
           ? null
           : storeNames.get(otp.tienda_redencion_id) ??
             null,
+      invoiceNumber: otp.invoice_number
     }));
   }
 }

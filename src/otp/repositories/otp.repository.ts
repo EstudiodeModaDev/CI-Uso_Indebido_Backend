@@ -21,6 +21,7 @@ interface OtpDatabaseRow {
   intentos_validacion: number;
   estado: OtpRecord["estado"];
   fecha_validacion: Date | null;
+  invoice_number: number | null;
 }
 
 export interface CreateOtpInput {
@@ -36,6 +37,7 @@ export interface RedeemOtpInput {
   redemptionStoreId: number;
   purchaseValue: number;
   redeemedAt: string;
+  invoiceNumber: number
 }
 
 export interface OtpHistoryRecord extends OtpRecord {
@@ -102,7 +104,8 @@ export class OtpRepository {
         fecha_redencion,
         valor_compra,
         intentos_validacion,
-        estado
+        estado,
+        invoice_number
       `)
       .single<OtpDatabaseRow>();
 
@@ -136,7 +139,8 @@ export class OtpRepository {
       valor_compra: row.valor_compra,
       intentos_validacion: row.intentos_validacion,
       estado: row.estado,
-      fecha_validacion: row.fecha_validacion
+      fecha_validacion: row.fecha_validacion,
+      invoice_number: row.invoice_number
     };
   }
 
@@ -157,7 +161,8 @@ export class OtpRepository {
         fecha_redencion,
         valor_compra,
         intentos_validacion,
-        estado
+        estado,
+        invoice_number
       `)
       .eq("persona_id", personId)
       .eq("estado", "PENDIENTE")
@@ -202,7 +207,8 @@ export class OtpRepository {
         valor_compra,
         intentos_validacion,
         estado,
-        fecha_validacion
+        fecha_validacion,
+        invoice_number
       `)
       .eq("persona_id", personId)
       .in("estado", [
@@ -323,6 +329,7 @@ export class OtpRepository {
         tienda_redencion_id: input.redemptionStoreId,
         fecha_redencion: input.redeemedAt,
         valor_compra: input.purchaseValue,
+        invoice_number: input.invoiceNumber
       })
       .eq("id", input.otpId)
       .eq("estado", "PENDIENTE")

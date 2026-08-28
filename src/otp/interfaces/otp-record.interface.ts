@@ -19,5 +19,5 @@ export interface OtpRecord {
   fecha_redencion: Date | null;
   valor_compra: number;
   intentos_validacion: number;
-  
+  invoice_number: number | null;
 }
