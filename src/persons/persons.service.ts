@@ -45,6 +45,20 @@ export class PersonsService {
     };
   }
 
+  async findIdByDocument(document: string): Promise<string | null> {
+    const person = await this.personsRepository.findByDocument(
+      document.trim(),
+    );
+
+    return person?.id ?? null;
+  }
+
+  async findManyByIds(
+    ids: string[],
+  ): Promise<Map<string, { document: string; fullName: string }>> {
+    return this.personsRepository.findManyByIds(ids);
+  }
+
   async findActiveByDocumentAndAudit(
     document: string,
     currentUser: CurrentUser,

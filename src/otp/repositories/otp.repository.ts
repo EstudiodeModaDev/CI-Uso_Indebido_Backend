@@ -45,6 +45,19 @@ export interface OtpHistoryRecord extends OtpRecord {
   tienda_redencion_nombre?: string | null;
 }
 
+export interface AdminOtpFilters {
+  personId?: string;
+  generationStoreId?: number;
+  redemptionStoreId?: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminOtpResult {
+  rows: OtpRecord[];
+  total: number;
+}
+
 @Injectable()
 export class OtpRepository {
   constructor(
@@ -238,6 +251,78 @@ export class OtpRepository {
     return (data ?? []).map((row) =>
       this.mapRow(row as OtpDatabaseRow),
     );
+  }
+
+  async findAllWithFilters(
+    filters: AdminOtpFilters,
+  ): Promise<AdminOtpResult> {
+    let query = this.supabase
+      .from("CODIGOS_OTP")
+      .select(
+        `
+        id,
+        persona_id,
+        tienda_generacion_id,
+        tienda_redencion_id,
+        codigo_hash,
+        codigo_encriptado,
+        fecha_generacion,
+        fecha_expiracion,
+        fecha_redencion,
+        valor_compra,
+        intentos_validacion,
+        estado,
+        fecha_validacion,
+        invoice_number
+      `,
+        { count: "exact" },
+      );
+
+    if (filters.personId) {
+      query = query.eq("persona_id", filters.personId);
+    }
+
+    if (filters.generationStoreId !== undefined) {
+      query = query.eq(
+        "tienda_generacion_id",
+        filters.generationStoreId,
+      );
+    }
+
+    if (filters.redemptionStoreId !== undefined) {
+      query = query.eq(
+        "tienda_redencion_id",
+        filters.redemptionStoreId,
+      );
+    }
+
+    const from = (filters.page - 1) * filters.pageSize;
+    const to = from + filters.pageSize - 1;
+
+    const { data, error, count } = await query
+      .order("fecha_generacion", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error("Error consultando codigos OTP (admin):", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_ADMIN_LOOKUP_FAILED",
+        message: "No fue posible consultar los códigos.",
+      });
+    }
+
+    return {
+      rows: (data ?? []).map((row) =>
+        this.mapRow(row as OtpDatabaseRow),
+      ),
+      total: count ?? 0,
+    };
   }
 
   async incrementAttempts(

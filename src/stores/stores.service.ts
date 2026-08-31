@@ -54,4 +54,8 @@ export class StoresService {
       uniqueIds,
     );
   }
+
+  async listAll(): Promise<Store[]> {
+    return this.storesRepository.findAll();
+  }
 }

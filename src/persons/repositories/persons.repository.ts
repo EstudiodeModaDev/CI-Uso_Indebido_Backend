@@ -78,4 +78,45 @@ export class PersonsRepository {
       status: data.estado,
     };
   }
+
+  async findManyByIds(
+    ids: string[],
+  ): Promise<Map<string, { document: string; fullName: string }>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const { data, error } = await this.supabase
+      .from("PERSONAS")
+      .select(`
+        id,
+        numero_documento,
+        nombres,
+        apellidos
+      `)
+      .in("id", ids);
+
+    if (error) {
+      console.error("Error consultando personas:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "PERSONS_LOOKUP_FAILED",
+        message: "No fue posible consultar las personas.",
+      });
+    }
+
+    return new Map(
+      (data ?? []).map((person) => [
+        person.id as string,
+        {
+          document: person.numero_documento as string,
+          fullName: `${person.nombres as string} ${person.apellidos as string}`.trim(),
+        },
+      ]),
+    );
+  }
 }

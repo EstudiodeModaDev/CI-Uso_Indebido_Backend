@@ -103,4 +103,38 @@ export class StoresRepository {
       ),
     );
   }
+
+  async findAll(): Promise<Store[]> {
+    const { data, error } = await this.supabase
+      .from("TIENDAS")
+      .select(`
+        id,
+        nombre,
+        correo,
+        activo
+      `)
+      .order("nombre", { ascending: true });
+
+    if (error) {
+      console.error("Error consultando tiendas:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      throw new InternalServerErrorException({
+        code: "STORES_LOOKUP_FAILED",
+        message: "No fue posible consultar las tiendas.",
+      });
+    }
+
+    return (data ?? []).map((store: StoreDatabaseRow) => ({
+      id: store.id,
+      name: store.nombre,
+      code: null,
+      email: store.correo ?? "",
+      status: store.activo,
+    }));
+  }
 }

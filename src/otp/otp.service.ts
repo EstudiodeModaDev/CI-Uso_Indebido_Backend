@@ -21,6 +21,7 @@ import {
 import { OtpRepository } from "./repositories/otp.repository";
 import type { OtpHistoryRecord } from "./repositories/otp.repository";
 import { AuditService } from "../audit/audit.service";
+import type { OtpStatus } from "./interfaces/otp-record.interface";
 
 
 
@@ -55,6 +56,28 @@ export interface OtpHistoryItemResponse {
   generateIn: string;
   redeemIn: string | null;
   invoiceNumber: number | null;
+}
+
+export interface AdminOtpHistoryItemResponse {
+  id: string;
+  code: string | null;
+  status: OtpStatus;
+  document: string;
+  personName: string;
+  generatedAt: string;
+  expiresAt: string;
+  redeemedAt: string | null;
+  purchaseValue: number;
+  generateIn: string;
+  redeemIn: string | null;
+  invoiceNumber: number | null;
+}
+
+export interface AdminOtpHistoryPage {
+  items: AdminOtpHistoryItemResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 @Injectable()
@@ -556,6 +579,117 @@ export class OtpService {
       otps,
       encryptionKey,
     );
+  }
+
+  async listAllForAdmin(
+    params: {
+      document?: string;
+      generationStoreId?: number;
+      redemptionStoreId?: number;
+      page: number;
+      pageSize: number;
+    },
+    currentUser: CurrentUser,
+  ): Promise<AdminOtpHistoryPage> {
+    let personId: string | undefined;
+
+    if (params.document) {
+      const foundId = await this.personsService.findIdByDocument(
+        params.document,
+      );
+
+      if (!foundId) {
+        await this.auditService.success(
+          "OTP_ADMIN_HISTORY_VIEWED",
+          {
+            usuario: currentUser.id,
+            entidad: "OTP",
+          },
+        );
+
+        return {
+          items: [],
+          total: 0,
+          page: params.page,
+          pageSize: params.pageSize,
+        };
+      }
+
+      personId = foundId;
+    }
+
+    const { rows, total } =
+      await this.otpRepository.findAllWithFilters({
+        personId,
+        generationStoreId: params.generationStoreId,
+        redemptionStoreId: params.redemptionStoreId,
+        page: params.page,
+        pageSize: params.pageSize,
+      });
+
+    const encryptionKey = this.configService.getOrThrow<string>(
+      "otp.encryptionKey",
+    );
+
+    const [storeNames, persons] = await Promise.all([
+      this.storesService.findNamesByIds(
+        rows.flatMap((row) =>
+          row.tienda_redencion_id === null
+            ? [row.tienda_generacion_id]
+            : [
+                row.tienda_generacion_id,
+                row.tienda_redencion_id,
+              ],
+        ),
+      ),
+      this.personsService.findManyByIds([
+        ...new Set(rows.map((row) => row.persona_id)),
+      ]),
+    ]);
+
+    const items = rows.map((row) => {
+      const person = persons.get(row.persona_id);
+
+      return {
+        id: row.id,
+        code: this.decryptStoredCode(
+          row.codigo_encriptado,
+          encryptionKey,
+        ),
+        status: row.estado,
+        document: person?.document ?? "",
+        personName: person?.fullName ?? "",
+        generatedAt: String(row.fecha_generacion),
+        expiresAt: String(row.fecha_expiracion),
+        redeemedAt: row.fecha_redencion
+          ? String(row.fecha_redencion)
+          : null,
+        purchaseValue: row.valor_compra,
+        generateIn:
+          storeNames.get(row.tienda_generacion_id) ?? "",
+        redeemIn:
+          row.tienda_redencion_id === null
+            ? null
+            : storeNames.get(row.tienda_redencion_id) ??
+              null,
+        invoiceNumber: row.invoice_number,
+      };
+    });
+
+    await this.auditService.success(
+      "OTP_ADMIN_HISTORY_VIEWED",
+      {
+        usuario: currentUser.id,
+        entidad: "OTP",
+      },
+    );
+
+    return {
+      items,
+      total,
+      page: params.page,
+      pageSize: params.pageSize,
+    };
   }
 
   private decryptStoredCode(

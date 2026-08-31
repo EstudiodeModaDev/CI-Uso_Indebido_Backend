@@ -13,6 +13,7 @@ import { RedeemOtpDto } from "./dto/redeem-otp.dto";
 import { OtpHistoryDto } from "./dto/otp-history.dto";
 import { Public } from "src/common/decorators/public.decorator";
 import { PublicOtpHistoryDto } from "./dto/public-otp-history.dto";
+import { AdminOtpHistoryDto } from "./dto/admin-otp-history.dto";
 
 @Controller("otp")
 export class OtpController {
@@ -78,6 +79,24 @@ export class OtpController {
   ) {
     return this.otpService.history(
       dto.document,
+      user,
+    );
+  }
+
+  @Roles("CONTROL_INTERNO")
+  @Post("history/admin")
+  historyAdmin(
+    @Body() dto: AdminOtpHistoryDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.otpService.listAllForAdmin(
+      {
+        document: dto.document,
+        generationStoreId: dto.generationStoreId,
+        redemptionStoreId: dto.redemptionStoreId,
+        page: dto.page ?? 1,
+        pageSize: dto.pageSize ?? 25,
+      },
       user,
     );
   }

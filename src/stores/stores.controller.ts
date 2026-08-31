@@ -16,4 +16,10 @@ export class StoresController {
   ) {
     return this.storesService.resolveCurrentStore(user);
   }
+
+  @Roles("CONTROL_INTERNO")
+  @Get()
+  async listStores() {
+    return this.storesService.listAll();
+  }
 }
