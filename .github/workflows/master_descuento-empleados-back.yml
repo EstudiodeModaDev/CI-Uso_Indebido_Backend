@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Node.js app to Azure Web App - api-envio-correos
+name: Build and deploy Node.js app to Azure Web App - Descuento-Empleados-Back
 
 on:
   push:
@@ -60,7 +60,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'api-envio-correos'
+          app-name: 'Descuento-Empleados-Back'
           slot-name: 'Production'
           package: .
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_11ED68851A9A4EFBB9FBB545BB0542F3 }}
