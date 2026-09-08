@@ -6,8 +6,6 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_CLIENT } from "../../database/database.constants";
 import type { OtpRecord } from "../interfaces/otp-record.interface";
-import { EmailsService } from "src/emails/emails.service";
-import { ConfigService } from "@nestjs/config";
 
 interface OtpDatabaseRow {
   id: string;
@@ -65,8 +63,6 @@ export class OtpRepository {
   constructor(
     @Inject(SUPABASE_CLIENT)
     private readonly supabase: SupabaseClient,
-    private readonly emailsService: EmailsService,
-    private readonly configService: ConfigService,
   ) {}
 
   async invalidatePendingForPerson(personId: string,): Promise<void> {
@@ -354,12 +350,7 @@ export class OtpRepository {
     }
   }
 
-  async markBlocked(
-    otpId: string,
-    details: { personName: string; document: string; storeName: string },
-  ): Promise<void> {
-    const environment = this.configService.getOrThrow<string>("NODE_ENV");
-
+  async markBlocked(otpId: string): Promise<void> {
     const { error } = await this.supabase
       .from("CODIGOS_OTP")
       .update({estado: "BLOQUEADO",})
@@ -377,63 +368,6 @@ export class OtpRepository {
         code: "OTP_BLOCK_UPDATE_FAILED",
         message: "No fue posible bloquear el código.",});
     }
-
-    await this.emailsService.send({
-      to: [environment === "development" ? "dpalacios@estudiodemoda.com.co" : "lmgonzalez@estudiodemoda.com.co"],
-      subject: "Alerta: código de autorización bloqueado por intentos fallidos",
-      html: this.buildOtpBlockedEmail({
-        otpId,
-        personName: details.personName,
-        document: details.document,
-        storeName: details.storeName,
-      }),
-      referenceType: "OTP",
-      referenceId: otpId,
-    });
-  }
-
-  private buildOtpBlockedEmail(input: {
-    otpId: string;
-    personName: string;
-    document: string;
-    storeName: string;
-  }): string {
-    return `
-      <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-        <div style="padding:22px;background:#7f1d1d;color:#ffffff;text-align:center;">
-          <h2 style="margin:0;">Actividad sospechosa: código OTP bloqueado</h2>
-        </div>
-
-        <div style="padding:24px;color:#1f2937;">
-          <p>
-            Se bloqueó un código de autorización de descuento por superar
-            el número máximo de intentos de validación permitidos.
-            Se recomienda revisar el caso.
-          </p>
-
-          <table style="width:100%;border-collapse:collapse;margin:24px 0;">
-            <tr>
-              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Persona</strong></td>
-              <td style="padding:8px;border:1px solid #e5e7eb;">${input.personName}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Documento</strong></td>
-              <td style="padding:8px;border:1px solid #e5e7eb;">${input.document}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Tienda</strong></td>
-              <td style="padding:8px;border:1px solid #e5e7eb;">${input.storeName}</td>
-            </tr>
-          </table>
-
-          <div style="margin:24px 0;padding:18px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
-            <p style="margin:0;color:#991b1b;">
-              El código quedó bloqueado y ya no puede utilizarse.
-            </p>
-          </div>
-        </div>
-      </div>
-    `.trim();
   }
 
   async markAsRedeemed(
