@@ -34,11 +34,11 @@ export class PersonsService {
 
     return {
       id: person.id,
-      tipo_documento: person.documentType,
-      numero_documento: person.document,
-      nombres: person.nombre,
-      correo: person.email ?? "",
-      telefono: person.phone ?? "",
+      tipo_documento: person.tipo_documento,
+      numero_documento: person.numero_documento,
+      nombres: person.nombres,
+      correo: person.correo ?? "",
+      telefono: person.telefono ?? "",
       apellidos: person.apellidos,
       estado: person.status,
       origen: ""

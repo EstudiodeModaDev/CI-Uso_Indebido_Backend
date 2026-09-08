@@ -4,25 +4,26 @@ import { SUPABASE_CLIENT } from "../../database/database.constants";
 
 export interface Person {
   id: string;
-  documentType: string;
-  document: string;
-  nombre: string;
-  email: string | null;
-  phone: string | null;
+  tipo_documento: string;
+  numero_documento: string;
+  nombres: string;
+  correo: string | null;
+  telefono: string | null;
   apellidos: string;
   status: "ACTIVO" | "INACTIVO";
+  tipo_persona: string
 }
 
 interface PersonDatabaseRow {
   id: string;
   tipo_documento: string;
-  documento: string;
-  nombre_completo: string;
+  numero_documento: string;
+  nombres: string;
+  apellidos: string;
   correo: string | null;
   telefono: string | null;
   estado: "ACTIVO" | "INACTIVO";
-  nombres: string
-  apellidos: string,
+  tipo_persona: string;
   origen: string
 }
 
@@ -69,13 +70,14 @@ export class PersonsRepository {
 
     return {
       id: data.id,
-      documentType: data.tipo_documento,
-      document: data.documento,
-      apellidos: data.nombre_completo,
-      email: data.correo,
-      phone: data.telefono,
-      nombre: data.apellidos,
+      tipo_documento: data.tipo_documento,
+      numero_documento: data.numero_documento,
+      nombres: data.nombres,
+      correo: data.correo,
+      telefono: data.telefono,
+      apellidos: data.apellidos,
       status: data.estado,
+      tipo_persona: data.tipo_persona
     };
   }
 

@@ -6,6 +6,8 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_CLIENT } from "../../database/database.constants";
 import type { OtpRecord } from "../interfaces/otp-record.interface";
+import { EmailsService } from "src/emails/emails.service";
+import { ConfigService } from "@nestjs/config";
 
 interface OtpDatabaseRow {
   id: string;
@@ -63,16 +65,14 @@ export class OtpRepository {
   constructor(
     @Inject(SUPABASE_CLIENT)
     private readonly supabase: SupabaseClient,
+    private readonly emailsService: EmailsService,
+    private readonly configService: ConfigService,
   ) {}
 
-  async invalidatePendingForPerson(
-    personId: string,
-  ): Promise<void> {
+  async invalidatePendingForPerson(personId: string,): Promise<void> {
     const { error } = await this.supabase
       .from("CODIGOS_OTP")
-      .update({
-        estado: "ANULADO",
-      })
+      .update({estado: "ANULADO",})
       .eq("persona_id", personId)
       .eq("estado", "PENDIENTE");
 
@@ -85,8 +85,7 @@ export class OtpRepository {
 
       throw new InternalServerErrorException({
         code: "OTP_INVALIDATION_FAILED",
-        message:
-          "No fue posible invalidar los códigos anteriores.",
+        message: "No fue posible invalidar los códigos anteriores.",
       });
     }
   }
@@ -96,8 +95,7 @@ export class OtpRepository {
       .from("CODIGOS_OTP")
       .insert({
         persona_id: input.personId,
-        tienda_generacion_id:
-          input.generationStoreId,
+        tienda_generacion_id: input.generationStoreId,
         codigo_hash: input.codeHash,
         codigo_encriptado: input.encryptedCode,
         fecha_expiracion: input.expiresAt,
@@ -157,9 +155,7 @@ export class OtpRepository {
     };
   }
 
-  async findLatestPendingByPersonId(
-    personId: string,
-  ): Promise<OtpRecord | null> {
+  async findLatestPendingByPersonId(personId: string,): Promise<OtpRecord | null> {
     const { data, error } = await this.supabase
       .from("CODIGOS_OTP")
       .select(`
@@ -179,9 +175,7 @@ export class OtpRepository {
       `)
       .eq("persona_id", personId)
       .eq("estado", "PENDIENTE")
-      .order("fecha_generacion", {
-        ascending: false,
-      })
+      .order("fecha_generacion", {ascending: false,})
       .limit(1)
       .maybeSingle<OtpDatabaseRow>();
 
@@ -202,9 +196,7 @@ export class OtpRepository {
     return data ? this.mapRow(data) : null;
   }
 
-  async findHistoryByPersonId(
-    personId: string,
-  ): Promise<OtpHistoryRecord[]> {
+  async findHistoryByPersonId(personId: string,): Promise<OtpHistoryRecord[]> {
     const { data, error } = await this.supabase
       .from("CODIGOS_OTP")
       .select(`
@@ -224,11 +216,7 @@ export class OtpRepository {
         invoice_number
       `)
       .eq("persona_id", personId)
-      .in("estado", [
-        "REDIMIDO",
-        "EXPIRADO",
-        "ANULADO",
-      ])
+      .in("estado", ["REDIMIDO", "EXPIRADO", "ANULADO",])
       .order("fecha_generacion", {
         ascending: false,
       });
@@ -243,9 +231,7 @@ export class OtpRepository {
 
       throw new InternalServerErrorException({
         code: "OTP_HISTORY_LOOKUP_FAILED",
-        message:
-          "No fue posible consultar el historial de cÃ³digos.",
-      });
+        message: "No fue posible consultar el historial de cÃ³digos.",});
     }
 
     return (data ?? []).map((row) =>
@@ -253,9 +239,7 @@ export class OtpRepository {
     );
   }
 
-  async findAllWithFilters(
-    filters: AdminOtpFilters,
-  ): Promise<AdminOtpResult> {
+  async findAllWithFilters(filters: AdminOtpFilters,): Promise<AdminOtpResult> {
     let query = this.supabase
       .from("CODIGOS_OTP")
       .select(
@@ -325,17 +309,12 @@ export class OtpRepository {
     };
   }
 
-  async incrementAttempts(
-    otpId: string,
-    currentAttempts: number,
-  ): Promise<number> {
+  async incrementAttempts(otpId: string, currentAttempts: number,): Promise<number> {
     const newAttempts = currentAttempts + 1;
 
-    const { data: updated, error } = await this.supabase
+    const { error } = await this.supabase
       .from("CODIGOS_OTP")
-      .update({
-        intentos_validacion: newAttempts,
-      })
+      .update({intentos_validacion: newAttempts,})
       .eq("id", otpId)
       .eq("estado", "PENDIENTE");
 
@@ -348,9 +327,7 @@ export class OtpRepository {
 
       throw new InternalServerErrorException({
         code: "OTP_ATTEMPTS_UPDATE_FAILED",
-        message:
-          "No fue posible actualizar los intentos del código.",
-      });
+        message: "No fue posible actualizar los intentos del código.",});
     }
 
     return newAttempts;
@@ -359,9 +336,7 @@ export class OtpRepository {
   async markExpired(otpId: string): Promise<void> {
     const { error } = await this.supabase
       .from("CODIGOS_OTP")
-      .update({
-        estado: "EXPIRADO",
-      })
+      .update({estado: "EXPIRADO",})
       .eq("id", otpId)
       .eq("estado", "PENDIENTE");
 
@@ -374,18 +349,20 @@ export class OtpRepository {
 
       throw new InternalServerErrorException({
         code: "OTP_EXPIRATION_UPDATE_FAILED",
-        message:
-          "No fue posible actualizar el estado del código.",
+        message: "No fue posible actualizar el estado del código.",
       });
     }
   }
 
-  async markBlocked(otpId: string): Promise<void> {
+  async markBlocked(
+    otpId: string,
+    details: { personName: string; document: string; storeName: string },
+  ): Promise<void> {
+    const environment = this.configService.getOrThrow<string>("NODE_ENV");
+
     const { error } = await this.supabase
       .from("CODIGOS_OTP")
-      .update({
-        estado: "BLOQUEADO",
-      })
+      .update({estado: "BLOQUEADO",})
       .eq("id", otpId)
       .eq("estado", "PENDIENTE");
 
@@ -398,10 +375,65 @@ export class OtpRepository {
 
       throw new InternalServerErrorException({
         code: "OTP_BLOCK_UPDATE_FAILED",
-        message:
-          "No fue posible bloquear el código.",
-      });
+        message: "No fue posible bloquear el código.",});
     }
+
+    await this.emailsService.send({
+      to: [environment === "development" ? "dpalacios@estudiodemoda.com.co" : "lmgonzalez@estudiodemoda.com.co"],
+      subject: "Alerta: código de autorización bloqueado por intentos fallidos",
+      html: this.buildOtpBlockedEmail({
+        otpId,
+        personName: details.personName,
+        document: details.document,
+        storeName: details.storeName,
+      }),
+      referenceType: "OTP",
+      referenceId: otpId,
+    });
+  }
+
+  private buildOtpBlockedEmail(input: {
+    otpId: string;
+    personName: string;
+    document: string;
+    storeName: string;
+  }): string {
+    return `
+      <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+        <div style="padding:22px;background:#7f1d1d;color:#ffffff;text-align:center;">
+          <h2 style="margin:0;">Actividad sospechosa: código OTP bloqueado</h2>
+        </div>
+
+        <div style="padding:24px;color:#1f2937;">
+          <p>
+            Se bloqueó un código de autorización de descuento por superar
+            el número máximo de intentos de validación permitidos.
+            Se recomienda revisar el caso.
+          </p>
+
+          <table style="width:100%;border-collapse:collapse;margin:24px 0;">
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Persona</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.personName}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Documento</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.document}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Tienda</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.storeName}</td>
+            </tr>
+          </table>
+
+          <div style="margin:24px 0;padding:18px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
+            <p style="margin:0;color:#991b1b;">
+              El código quedó bloqueado y ya no puede utilizarse.
+            </p>
+          </div>
+        </div>
+      </div>
+    `.trim();
   }
 
   async markAsRedeemed(

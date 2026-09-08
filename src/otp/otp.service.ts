@@ -266,7 +266,8 @@ export class OtpService {
     * resolvemos la tienda para garantizar que el usuario autenticado
     * realmente pertenece a una tienda activa.
     */
-    await this.storesService.resolveCurrentStore(currentUser);
+    const store =
+      await this.storesService.resolveCurrentStore(currentUser);
 
     const person =
       await this.personsService.findActiveByDocument(document);
@@ -311,7 +312,11 @@ export class OtpService {
     const maxAttempts = this.configService.getOrThrow<number>("otp.maxAttempts",);
 
     if (otp.intentos_validacion >= maxAttempts) {
-      await this.otpRepository.markBlocked(otp.id);
+      await this.otpRepository.markBlocked(otp.id, {
+        personName: person.nombres + " " + person.apellidos,
+        document: person.numero_documento,
+        storeName: store.name,
+      });
 
       throw new BadRequestException({
         code: "OTP_MAX_ATTEMPTS_REACHED",
@@ -344,7 +349,11 @@ export class OtpService {
       );
 
       if (newAttempts >= maxAttempts) {
-        await this.otpRepository.markBlocked(otp.id);
+        await this.otpRepository.markBlocked(otp.id, {
+          personName: person.nombres + " " + person.apellidos,
+          document: person.numero_documento,
+          storeName: store.name,
+        });
 
         throw new BadRequestException({
           code: "OTP_MAX_ATTEMPTS_REACHED",
@@ -431,7 +440,11 @@ export class OtpService {
       );
 
     if (otp.intentos_validacion >= maxAttempts) {
-      await this.otpRepository.markBlocked(otp.id);
+      await this.otpRepository.markBlocked(otp.id, {
+        personName: person.nombres + " " + person.apellidos,
+        document: person.numero_documento,
+        storeName: store.name,
+      });
 
       throw new BadRequestException({
         code: "OTP_MAX_ATTEMPTS_REACHED",
@@ -459,7 +472,11 @@ export class OtpService {
         );
 
       if (newAttempts >= maxAttempts) {
-        await this.otpRepository.markBlocked(otp.id);
+        await this.otpRepository.markBlocked(otp.id, {
+          personName: person.nombres + " " + person.apellidos,
+          document: person.numero_documento,
+          storeName: store.name,
+        });
 
         throw new BadRequestException({
           code: "OTP_MAX_ATTEMPTS_REACHED",
