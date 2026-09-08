@@ -132,6 +132,32 @@ export class OtpRepository {
     return this.mapRow(data);
   }
 
+  async countGeneratedToday(personId: string): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { count, error } = await this.supabase
+      .from("CODIGOS_OTP")
+      .select("id", { count: "exact", head: true })
+      .eq("persona_id", personId)
+      .gte("fecha_generacion", startOfDay.toISOString());
+
+    if (error) {
+      console.error("Error contando OTP generados hoy:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+
+      throw new InternalServerErrorException({
+        code: "OTP_DAILY_COUNT_FAILED",
+        message: "No fue posible consultar los códigos generados hoy.",
+      });
+    }
+
+    return count ?? 0;
+  }
+
   private mapRow(row: OtpDatabaseRow): OtpRecord {
     return {
       id: row.id,

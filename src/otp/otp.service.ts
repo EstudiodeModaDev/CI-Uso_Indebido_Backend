@@ -150,6 +150,21 @@ export class OtpService {
         entidad: "OTP",
       },
     );
+
+    const generatedToday = await this.otpRepository.countGeneratedToday(
+      person.id,
+    );
+
+    if (generatedToday >= 4) {
+      await this.notifyExcessiveOtpGeneration({
+        otpId: otp.id,
+        personName: person.nombres + " " + person.apellidos,
+        document: person.numero_documento,
+        storeName: store.name,
+        generatedToday,
+      });
+    }
+
     const emailResult = await this.emailsService.send({
       to: [person.correo],
       subject: "Código de autorización de descuento",
@@ -201,28 +216,91 @@ export class OtpService {
     };
   }
 
+  private getSecurityAlertRecipients(): string[] {
+    const environment = this.configService.getOrThrow<string>(
+      "app.environment",
+    );
+
+    return [
+      environment === "development"
+        ? "dpalacios@estudiodemoda.com.co"
+        : "lmgonzalez@estudiodemoda.com.co",
+    ];
+  }
+
   private async notifyOtpBlocked(input: {
     otpId: string;
     personName: string;
     document: string;
     storeName: string;
   }): Promise<void> {
-    const environment = this.configService.getOrThrow<string>(
-      "app.environment",
-    );
-
     await this.emailsService.send({
-      to: [
-        environment === "development"
-          ? "dpalacios@estudiodemoda.com.co"
-          : "lmgonzalez@estudiodemoda.com.co",
-      ],
+      to: this.getSecurityAlertRecipients(),
       subject:
         "Alerta: código de autorización bloqueado por intentos fallidos",
       html: this.buildOtpBlockedEmail(input),
       referenceType: "OTP",
       referenceId: input.otpId,
     });
+  }
+
+  private async notifyExcessiveOtpGeneration(input: {
+    otpId: string;
+    personName: string;
+    document: string;
+    storeName: string;
+    generatedToday: number;
+  }): Promise<void> {
+    await this.emailsService.send({
+      to: this.getSecurityAlertRecipients(),
+      subject:
+        "Alerta: múltiples códigos de autorización generados en el día",
+      html: this.buildExcessiveGenerationEmail(input),
+      referenceType: "OTP",
+      referenceId: input.otpId,
+    });
+  }
+
+  private buildExcessiveGenerationEmail(input: {
+    personName: string;
+    document: string;
+    storeName: string;
+    generatedToday: number;
+  }): string {
+    return `
+      <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+        <div style="padding:22px;background:#7f1d1d;color:#ffffff;text-align:center;">
+          <h2 style="margin:0;">Actividad sospechosa: múltiples códigos generados</h2>
+        </div>
+
+        <div style="padding:24px;color:#1f2937;">
+          <p>
+            Se generaron múltiples códigos de autorización de descuento
+            para la misma persona en el día de hoy.
+            Se recomienda revisar el caso.
+          </p>
+
+          <table style="width:100%;border-collapse:collapse;margin:24px 0;">
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Persona</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.personName}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Documento</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.document}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Tienda</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.storeName}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;"><strong>Códigos generados hoy</strong></td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${input.generatedToday}</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    `.trim();
   }
 
   private buildOtpBlockedEmail(input: {
