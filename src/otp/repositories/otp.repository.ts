@@ -331,10 +331,10 @@ export class OtpRepository {
   ): Promise<number> {
     const newAttempts = currentAttempts + 1;
 
-    const { error } = await this.supabase
+    const { data: updated, error } = await this.supabase
       .from("CODIGOS_OTP")
       .update({
-        intentos: newAttempts,
+        intentos_validacion: newAttempts,
       })
       .eq("id", otpId)
       .eq("estado", "PENDIENTE");
