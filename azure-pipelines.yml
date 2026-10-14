@@ -1,0 +1,38 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: OnPrem
+
+variables:
+  TAG: $(Build.BuildId)                          # versión de la imagen = número de build
+  ENV_FILE: /opt/compras-descuentos-api/.env      # secretos, viven solo en el servidor
+  HOST_PORT: 3000                                # puerto publicado en el servidor
+  BIND_IP: 0.0.0.0                               # usar 127.0.0.1 si hay Nginx delante
+
+steps:
+  - checkout: self
+
+  - script: docker compose build
+    displayName: Construir imagen
+
+  - script: docker compose up -d --remove-orphans
+    displayName: Desplegar contenedor
+
+  - script: |
+      CID=$(docker compose ps -q api)
+      for i in $(seq 1 18); do
+        STATUS=$(docker inspect -f '{{.State.Health.Status}}' "$CID")
+        echo "Intento $i - estado: $STATUS"
+        if [ "$STATUS" = "healthy" ]; then exit 0; fi
+        sleep 5
+      done
+      echo "La API no quedó saludable en 90 segundos"
+      docker compose logs --tail 100 api
+      exit 1
+    displayName: Esperar health check (/api/health)
+
+  - script: docker image prune -f
+    displayName: Limpiar imágenes sin uso
