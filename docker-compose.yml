@@ -1,0 +1,13 @@
+name: compras-y-descuentos-EDM-api
+
+services:
+  api:
+    build: .
+    image: descuento-empleados-back:${TAG:-latest}
+    env_file: ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${BIND_IP:-0.0.0.0}:${HOST_PORT:-3000}:3000"
+    restart: unless-stopped
