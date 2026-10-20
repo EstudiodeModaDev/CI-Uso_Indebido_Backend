@@ -1,7 +1,7 @@
-import type { AuditResult } from "./audit-entry.interface";
+import type { AuditResult } from './audit-entry.interface';
 
 export interface AuditLog {
-  id: number
+  id: number;
 
   accion: string;
 

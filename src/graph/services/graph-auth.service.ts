@@ -2,12 +2,12 @@ import {
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
-} from "@nestjs/common";
-import { HttpService } from "@nestjs/axios";
-import { ConfigService } from "@nestjs/config";
-import axios, { AxiosError } from "axios";
-import { firstValueFrom } from "rxjs";
-import type { GraphTokenResponse } from "../interfaces/graph-token-response.interface";
+} from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosError } from 'axios';
+import { firstValueFrom } from 'rxjs';
+import type { GraphTokenResponse } from '../interfaces/graph-token-response.interface';
 
 @Injectable()
 export class GraphAuthService {
@@ -25,8 +25,7 @@ export class GraphAuthService {
 
     const tokenIsStillValid =
       this.cachedToken !== null &&
-      Date.now() <
-        this.tokenExpiresAt - refreshMarginMilliseconds;
+      Date.now() < this.tokenExpiresAt - refreshMarginMilliseconds;
 
     if (tokenIsStillValid) {
       return this.cachedToken!;
@@ -50,20 +49,12 @@ export class GraphAuthService {
   }
 
   private async requestAccessToken(): Promise<string> {
-    const tenantId =
-      this.configService.getOrThrow<string>(
-        "graph.tenantId",
-      );
+    const tenantId = this.configService.getOrThrow<string>('graph.tenantId');
 
-    const clientId =
-      this.configService.getOrThrow<string>(
-        "graph.clientId",
-      );
+    const clientId = this.configService.getOrThrow<string>('graph.clientId');
 
     const clientSecret =
-      this.configService.getOrThrow<string>(
-        "graph.clientSecret",
-      );
+      this.configService.getOrThrow<string>('graph.clientSecret');
 
     const tokenUrl =
       `https://login.microsoftonline.com/` +
@@ -72,23 +63,18 @@ export class GraphAuthService {
     const body = new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
-      scope: "https://graph.microsoft.com/.default",
-      grant_type: "client_credentials",
+      scope: 'https://graph.microsoft.com/.default',
+      grant_type: 'client_credentials',
     });
 
     try {
       const response = await firstValueFrom(
-        this.httpService.post<GraphTokenResponse>(
-          tokenUrl,
-          body.toString(),
-          {
-            headers: {
-              "Content-Type":
-                "application/x-www-form-urlencoded",
-            },
-            timeout: 15_000,
+        this.httpService.post<GraphTokenResponse>(tokenUrl, body.toString(), {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
           },
-        ),
+          timeout: 15_000,
+        }),
       );
 
       const token = response.data.access_token;
@@ -96,15 +82,13 @@ export class GraphAuthService {
 
       if (!token || !expiresIn) {
         throw new InternalServerErrorException({
-          code: "GRAPH_TOKEN_INVALID_RESPONSE",
-          message:
-            "Azure respondió sin un token válido.",
+          code: 'GRAPH_TOKEN_INVALID_RESPONSE',
+          message: 'Azure respondió sin un token válido.',
         });
       }
 
       this.cachedToken = token;
-      this.tokenExpiresAt =
-        Date.now() + expiresIn * 1000;
+      this.tokenExpiresAt = Date.now() + expiresIn * 1000;
 
       return token;
     } catch (error) {
@@ -115,9 +99,9 @@ export class GraphAuthService {
         this.logTokenError(error);
 
         throw new UnauthorizedException({
-          code: "GRAPH_AUTH_FAILED",
+          code: 'GRAPH_AUTH_FAILED',
           message:
-            "No fue posible autenticar la aplicación con Microsoft Graph.",
+            'No fue posible autenticar la aplicación con Microsoft Graph.',
         });
       }
 
@@ -125,41 +109,31 @@ export class GraphAuthService {
     }
   }
 
-  private logTokenError(
-    error: AxiosError,
-  ): void {
-    console.error(
-      "Error obteniendo token de Microsoft Graph:",
-      {
-        status: error.response?.status,
-        /*
-         * No imprimimos headers ni configuración porque
-         * podrían incluir información sensible.
-         */
-        response:
-          this.extractSafeErrorMessage(
-            error.response?.data,
-          ),
-      },
-    );
+  private logTokenError(error: AxiosError): void {
+    console.error('Error obteniendo token de Microsoft Graph:', {
+      status: error.response?.status,
+      /*
+       * No imprimimos headers ni configuración porque
+       * podrían incluir información sensible.
+       */
+      response: this.extractSafeErrorMessage(error.response?.data),
+    });
   }
 
-  private extractSafeErrorMessage(
-    data: unknown,
-  ): string {
+  private extractSafeErrorMessage(data: unknown): string {
     if (
-      typeof data === "object" &&
+      typeof data === 'object' &&
       data !== null &&
-      "error_description" in data &&
-      typeof (
-        data as { error_description?: unknown }
-      ).error_description === "string"
+      'error_description' in data &&
+      typeof (data as { error_description?: unknown }).error_description ===
+        'string'
     ) {
-      return (
-        data as { error_description: string }
-      ).error_description.slice(0, 500);
+      return (data as { error_description: string }).error_description.slice(
+        0,
+        500,
+      );
     }
 
-    return "Respuesta de autenticación no disponible.";
+    return 'Respuesta de autenticación no disponible.';
   }
 }

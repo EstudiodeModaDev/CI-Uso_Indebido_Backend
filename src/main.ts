@@ -1,25 +1,25 @@
-import { ValidationPipe } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { NestFactory } from "@nestjs/core";
-import helmet from "helmet";
-import { AppModule } from "./app.module";
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
+import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
 
-  const port = configService.getOrThrow<number>("app.port");
-  const apiPrefix = configService.getOrThrow<string>("app.apiPrefix");
+  const port = configService.getOrThrow<number>('app.port');
+  const apiPrefix = configService.getOrThrow<string>('app.apiPrefix');
 
   app.setGlobalPrefix(apiPrefix);
 
   app.use(helmet());
 
   app.enableCors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
     credentials: true,
   });
 
@@ -36,9 +36,7 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(port);
 
-  console.log(
-    `API ejecutándose en http://localhost:${port}/${apiPrefix}`,
-  );
+  console.log(`API ejecutándose en http://localhost:${port}/${apiPrefix}`);
 }
 
 void bootstrap();

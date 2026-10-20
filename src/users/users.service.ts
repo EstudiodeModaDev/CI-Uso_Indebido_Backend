@@ -1,32 +1,39 @@
-import {ForbiddenException, Injectable, UnauthorizedException,} from "@nestjs/common";
-import type { CurrentUser } from "../common/types/current-user.type";
-import { UsersRepository } from "./repositories/users.repository";
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import type { CurrentUser } from '../common/types/current-user.type';
+import { UsersRepository } from './repositories/users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository,) {}
+  constructor(private readonly usersRepository: UsersRepository) {}
 
-  async resolveActiveUser(authUserId: string, authEmail?: string,): Promise<CurrentUser> {
+  async resolveActiveUser(
+    authUserId: string,
+    authEmail?: string,
+  ): Promise<CurrentUser> {
     const user = await this.usersRepository.findByAuthUserId(authUserId);
 
     if (!user) {
       throw new UnauthorizedException({
-        code: "USER_NOT_REGISTERED",
-        message: "El usuario autenticado no está registrado en la aplicación.",
+        code: 'USER_NOT_REGISTERED',
+        message: 'El usuario autenticado no está registrado en la aplicación.',
       });
     }
 
-    if (user.status !== "ACTIVO") {
+    if (user.status !== 'ACTIVO') {
       throw new ForbiddenException({
-        code: "USER_INACTIVE",
-        message: "El usuario se encuentra inactivo.",
+        code: 'USER_INACTIVE',
+        message: 'El usuario se encuentra inactivo.',
       });
     }
 
     if (user.roles.length === 0) {
       throw new ForbiddenException({
-        code: "USER_WITHOUT_ROLES",
-        message:"El usuario no tiene roles activos asignados.",
+        code: 'USER_WITHOUT_ROLES',
+        message: 'El usuario no tiene roles activos asignados.',
       });
     }
 

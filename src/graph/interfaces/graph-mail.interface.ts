@@ -10,7 +10,7 @@ export interface GraphSendMailPayload {
   message: {
     subject: string;
     body: {
-      contentType: "HTML" | "Text";
+      contentType: 'HTML' | 'Text';
       content: string;
     };
     toRecipients: GraphRecipient[];

@@ -1,7 +1,7 @@
-import { HttpModule } from "@nestjs/axios";
-import { Module } from "@nestjs/common";
-import { GraphAuthService } from "./services/graph-auth.service";
-import { GraphMailService } from "./services/graph-mail.service";
+import { HttpModule } from '@nestjs/axios';
+import { Module } from '@nestjs/common';
+import { GraphAuthService } from './services/graph-auth.service';
+import { GraphMailService } from './services/graph-mail.service';
 
 @Module({
   imports: [
@@ -10,12 +10,7 @@ import { GraphMailService } from "./services/graph-mail.service";
       maxRedirects: 0,
     }),
   ],
-  providers: [
-    GraphAuthService,
-    GraphMailService,
-  ],
-  exports: [
-    GraphMailService,
-  ],
+  providers: [GraphAuthService, GraphMailService],
+  exports: [GraphMailService],
 })
 export class GraphModule {}

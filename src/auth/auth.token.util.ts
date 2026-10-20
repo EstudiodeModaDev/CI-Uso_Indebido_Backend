@@ -1,6 +1,6 @@
-import type { Request } from "express";
+import type { Request } from 'express';
 
-export function extractBearerToken(request: Request,): string | null {
+export function extractBearerToken(request: Request): string | null {
   const authorization = request.headers.authorization;
 
   if (!authorization) {
@@ -9,7 +9,7 @@ export function extractBearerToken(request: Request,): string | null {
 
   const [scheme, token] = authorization.trim().split(/\s+/);
 
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
+  if (scheme?.toLowerCase() !== 'bearer' || !token) {
     return null;
   }
 

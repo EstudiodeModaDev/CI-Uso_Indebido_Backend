@@ -1,7 +1,4 @@
-export type AuditResult =
-  | "EXITOSO"
-  | "FALLIDO"
-  | "ADVERTENCIA";
+export type AuditResult = 'EXITOSO' | 'FALLIDO' | 'ADVERTENCIA';
 
 export interface AuditEntry {
   accion: string;
@@ -11,5 +8,5 @@ export interface AuditEntry {
   entidad?: string | null;
 
   resultado?: AuditResult;
-    mensaje?: string | null
+  mensaje?: string | null;
 }

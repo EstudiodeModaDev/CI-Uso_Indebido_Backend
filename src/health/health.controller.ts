@@ -1,8 +1,8 @@
-import {Controller, Get, ServiceUnavailableException,} from "@nestjs/common";
-import { HealthService } from "./health.service";
-import { Public } from "../common/decorators/public.decorator";
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { HealthService } from './health.service';
+import { Public } from '../common/decorators/public.decorator';
 
-@Controller("health")
+@Controller('health')
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
@@ -11,10 +11,10 @@ export class HealthController {
   async check() {
     const result = await this.healthService.check();
 
-    if (result.status === "degraded") {
+    if (result.status === 'degraded') {
       throw new ServiceUnavailableException({
-        code: "SERVICE_UNAVAILABLE",
-        message: "No fue posible conectar con la base de datos.",
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'No fue posible conectar con la base de datos.',
         ...result,
       });
     }

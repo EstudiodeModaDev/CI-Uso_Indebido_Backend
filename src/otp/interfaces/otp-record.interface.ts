@@ -1,9 +1,5 @@
 export type OtpStatus =
-  | "PENDIENTE"
-  | "REDIMIDO"
-  | "EXPIRADO"
-  | "ANULADO"
-  | "BLOQUEADO";
+  'PENDIENTE' | 'REDIMIDO' | 'EXPIRADO' | 'ANULADO' | 'BLOQUEADO';
 
 export interface OtpRecord {
   id: string;

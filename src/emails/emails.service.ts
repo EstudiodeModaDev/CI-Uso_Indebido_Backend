@@ -1,13 +1,9 @@
-import {
-  Inject,
-  Injectable,
-  InternalServerErrorException,
-} from "@nestjs/common";
-import { EMAIL_PROVIDER } from "./emails.constants";
-import type { EmailPayload } from "./interfaces/email-payload.interface";
-import type { EmailProvider } from "./interfaces/email-provider.interface";
-import type { EmailResult } from "./interfaces/email-result.interface";
-import { EmailLogsRepository } from "./repositories/email-logs.repository";
+import { Inject, Injectable } from '@nestjs/common';
+import { EMAIL_PROVIDER } from './emails.constants';
+import type { EmailPayload } from './interfaces/email-payload.interface';
+import type { EmailProvider } from './interfaces/email-provider.interface';
+import type { EmailResult } from './interfaces/email-result.interface';
+import { EmailLogsRepository } from './repositories/email-logs.repository';
 
 @Injectable()
 export class EmailsService {
@@ -26,11 +22,11 @@ export class EmailsService {
     } catch (error) {
       result = {
         success: false,
-        provider: "unknown",
+        provider: 'unknown',
         errorMessage:
           error instanceof Error
             ? error.message
-            : "Error desconocido enviando correo.",
+            : 'Error desconocido enviando correo.',
       };
     }
 
@@ -42,7 +38,7 @@ export class EmailsService {
         recipient,
         subject: payload.subject,
         provider: result.provider,
-        status: result.success ? "ENVIADO" : "FALLIDO",
+        status: result.success ? 'ENVIADO' : 'FALLIDO',
         referenceType: payload.referenceType,
         referenceId: payload.referenceId,
         statusCode: result.statusCode,

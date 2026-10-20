@@ -3,6 +3,6 @@ export interface DatabaseUser {
   authUserId: string;
   email: string;
   personId: string | null;
-  status: "ACTIVO" | "INACTIVO";
+  status: 'ACTIVO' | 'INACTIVO';
   roles: string[];
 }

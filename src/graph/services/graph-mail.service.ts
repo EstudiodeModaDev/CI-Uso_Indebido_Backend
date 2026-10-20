@@ -1,10 +1,10 @@
-import { Injectable } from "@nestjs/common";
-import { HttpService } from "@nestjs/axios";
-import { ConfigService } from "@nestjs/config";
-import axios, { AxiosError } from "axios";
-import { firstValueFrom } from "rxjs";
-import type { GraphSendMailPayload } from "../interfaces/graph-mail.interface";
-import { GraphAuthService } from "./graph-auth.service";
+import { Injectable } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosError } from 'axios';
+import { firstValueFrom } from 'rxjs';
+import type { GraphSendMailPayload } from '../interfaces/graph-mail.interface';
+import { GraphAuthService } from './graph-auth.service';
 
 export interface SendGraphMailInput {
   to: string[];
@@ -28,52 +28,39 @@ export class GraphMailService {
     private readonly graphAuthService: GraphAuthService,
   ) {}
 
-  async send(
-    input: SendGraphMailInput,
-  ): Promise<SendGraphMailResult> {
-    const sender =
-      this.configService.getOrThrow<string>(
-        "graph.sender",
-      );
+  async send(input: SendGraphMailInput): Promise<SendGraphMailResult> {
+    const sender = this.configService.getOrThrow<string>('graph.sender');
 
-    const token =
-      await this.graphAuthService.getAccessToken();
+    const token = await this.graphAuthService.getAccessToken();
 
     const endpoint =
-      "https://graph.microsoft.com/v1.0/users/" +
+      'https://graph.microsoft.com/v1.0/users/' +
       `${encodeURIComponent(sender)}/sendMail`;
 
     const payload: GraphSendMailPayload = {
       message: {
         subject: input.subject,
         body: {
-          contentType: "HTML",
+          contentType: 'HTML',
           content: input.html,
         },
         toRecipients: this.mapRecipients(input.to),
         ccRecipients: this.mapRecipients(input.cc ?? []),
-        bccRecipients: this.mapRecipients(
-          input.bcc ?? [],
-        ),
+        bccRecipients: this.mapRecipients(input.bcc ?? []),
       },
       saveToSentItems: true,
     };
 
     try {
       const response = await firstValueFrom(
-        this.httpService.post(
-          endpoint,
-          payload,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            timeout: 20_000,
-            validateStatus: (status) =>
-              status >= 200 && status < 300,
+        this.httpService.post(endpoint, payload, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
           },
-        ),
+          timeout: 20_000,
+          validateStatus: (status) => status >= 200 && status < 300,
+        }),
       );
 
       return {
@@ -87,7 +74,7 @@ export class GraphMailService {
           errorMessage:
             error instanceof Error
               ? error.message
-              : "Error desconocido enviando correo.",
+              : 'Error desconocido enviando correo.',
         };
       }
 
@@ -95,9 +82,7 @@ export class GraphMailService {
     }
   }
 
-  private mapRecipients(
-    addresses: string[],
-  ): Array<{
+  private mapRecipients(addresses: string[]): Array<{
     emailAddress: {
       address: string;
     };
@@ -109,21 +94,13 @@ export class GraphMailService {
     }));
   }
 
-  private mapAxiosError(
-    error: AxiosError,
-  ): SendGraphMailResult {
-    const graphMessage =
-      this.extractGraphErrorMessage(
-        error.response?.data,
-      );
+  private mapAxiosError(error: AxiosError): SendGraphMailResult {
+    const graphMessage = this.extractGraphErrorMessage(error.response?.data);
 
-    console.error(
-      "Error enviando correo con Microsoft Graph:",
-      {
-        status: error.response?.status,
-        message: graphMessage,
-      },
-    );
+    console.error('Error enviando correo con Microsoft Graph:', {
+      status: error.response?.status,
+      message: graphMessage,
+    });
 
     return {
       success: false,
@@ -132,14 +109,8 @@ export class GraphMailService {
     };
   }
 
-  private extractGraphErrorMessage(
-    data: unknown,
-  ): string {
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      "error" in data
-    ) {
+  private extractGraphErrorMessage(data: unknown): string {
+    if (typeof data === 'object' && data !== null && 'error' in data) {
       const graphError = (
         data as {
           error?: {
@@ -150,18 +121,16 @@ export class GraphMailService {
       ).error;
 
       const code =
-        typeof graphError?.code === "string"
-          ? graphError.code
-          : "GRAPH_ERROR";
+        typeof graphError?.code === 'string' ? graphError.code : 'GRAPH_ERROR';
 
       const message =
-        typeof graphError?.message === "string"
+        typeof graphError?.message === 'string'
           ? graphError.message
-          : "Microsoft Graph rechazó el envío.";
+          : 'Microsoft Graph rechazó el envío.';
 
       return `${code}: ${message}`.slice(0, 1000);
     }
 
-    return "Microsoft Graph rechazó el envío.";
+    return 'Microsoft Graph rechazó el envío.';
   }
 }

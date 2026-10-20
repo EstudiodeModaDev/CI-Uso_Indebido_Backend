@@ -2,10 +2,10 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
-} from "@nestjs/common";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { SUPABASE_CLIENT } from "../../database/database.constants";
-import type { Store } from "../interfaces/store.interface";
+} from '@nestjs/common';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_CLIENT } from '../../database/database.constants';
+import type { Store } from '../interfaces/store.interface';
 
 interface StoreDatabaseRow {
   id: number;
@@ -26,19 +26,21 @@ export class StoresRepository {
     const normalizedEmail = email.trim().toLowerCase();
 
     const { data, error } = await this.supabase
-      .from("TIENDAS")
-      .select(`
+      .from('TIENDAS')
+      .select(
+        `
         id,
         nombre,
         correo,
         ciudad,
         activo
-      `)
-      .ilike("correo", normalizedEmail)
+      `,
+      )
+      .ilike('correo', normalizedEmail)
       .maybeSingle<StoreDatabaseRow>();
 
     if (error) {
-      console.error("Error consultando la tienda:", {
+      console.error('Error consultando la tienda:', {
         message: error.message,
         code: error.code,
         details: error.details,
@@ -46,8 +48,8 @@ export class StoresRepository {
       });
 
       throw new InternalServerErrorException({
-        code: "STORE_LOOKUP_FAILED",
-        message: "No fue posible consultar la tienda.",
+        code: 'STORE_LOOKUP_FAILED',
+        message: 'No fue posible consultar la tienda.',
       });
     }
 
@@ -59,28 +61,28 @@ export class StoresRepository {
       id: data.id,
       name: data.nombre,
       code: data.codigo ?? null,
-      email: data.correo ?? "",
+      email: data.correo ?? '',
       status: data.activo,
     };
   }
 
-  async findNamesByIds(
-    ids: number[],
-  ): Promise<Map<number, string>> {
+  async findNamesByIds(ids: number[]): Promise<Map<number, string>> {
     if (ids.length === 0) {
       return new Map();
     }
 
     const { data, error } = await this.supabase
-      .from("TIENDAS")
-      .select(`
+      .from('TIENDAS')
+      .select(
+        `
         id,
         nombre
-      `)
-      .in("id", ids);
+      `,
+      )
+      .in('id', ids);
 
     if (error) {
-      console.error("Error consultando nombres de tiendas:", {
+      console.error('Error consultando nombres de tiendas:', {
         message: error.message,
         code: error.code,
         details: error.details,
@@ -88,16 +90,14 @@ export class StoresRepository {
       });
 
       throw new InternalServerErrorException({
-        code: "STORE_NAMES_LOOKUP_FAILED",
-        message:
-          "No fue posible consultar los nombres de las tiendas.",
+        code: 'STORE_NAMES_LOOKUP_FAILED',
+        message: 'No fue posible consultar los nombres de las tiendas.',
       });
     }
 
     return new Map(
       (data ?? []).flatMap((store) =>
-        typeof store.id === "number" &&
-        typeof store.nombre === "string"
+        typeof store.id === 'number' && typeof store.nombre === 'string'
           ? [[store.id, store.nombre] as const]
           : [],
       ),
@@ -106,17 +106,19 @@ export class StoresRepository {
 
   async findAll(): Promise<Store[]> {
     const { data, error } = await this.supabase
-      .from("TIENDAS")
-      .select(`
+      .from('TIENDAS')
+      .select(
+        `
         id,
         nombre,
         correo,
         activo
-      `)
-      .order("nombre", { ascending: true });
+      `,
+      )
+      .order('nombre', { ascending: true });
 
     if (error) {
-      console.error("Error consultando tiendas:", {
+      console.error('Error consultando tiendas:', {
         message: error.message,
         code: error.code,
         details: error.details,
@@ -124,8 +126,8 @@ export class StoresRepository {
       });
 
       throw new InternalServerErrorException({
-        code: "STORES_LOOKUP_FAILED",
-        message: "No fue posible consultar las tiendas.",
+        code: 'STORES_LOOKUP_FAILED',
+        message: 'No fue posible consultar las tiendas.',
       });
     }
 
@@ -133,7 +135,7 @@ export class StoresRepository {
       id: store.id,
       name: store.nombre,
       code: null,
-      email: store.correo ?? "",
+      email: store.correo ?? '',
       status: store.activo,
     }));
   }

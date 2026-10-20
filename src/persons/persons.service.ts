@@ -1,11 +1,9 @@
-import {
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import { AuditService } from "../audit/audit.service";
-import type { CurrentUser } from "../common/types/current-user.type";
-import { PersonResponseDto } from "./dto/person-response.dto";
-import { PersonsRepository } from "./repositories/persons.repository";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
+import type { CurrentUser } from '../common/types/current-user.type';
+import { PersonResponseDto } from './dto/person-response.dto';
+import { PersonsRepository } from './repositories/persons.repository';
+import type { Person } from './repositories/persons.repository';
 
 @Injectable()
 export class PersonsService {
@@ -14,21 +12,16 @@ export class PersonsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findActiveByDocument(
-    document: string,
-  ): Promise<PersonResponseDto> {
+  async findActiveByDocument(document: string): Promise<PersonResponseDto> {
     const normalizedDocument = document.trim();
 
     const person =
-      await this.personsRepository.findByDocument(
-        normalizedDocument,
-      );
+      await this.personsRepository.findByDocument(normalizedDocument);
 
-    if (!person || person.status !== "ACTIVO") {
+    if (!person || person.status !== 'ACTIVO') {
       throw new NotFoundException({
-        code: "PERSON_NOT_FOUND",
-        message:
-          "No se encontró una persona activa con ese documento.",
+        code: 'PERSON_NOT_FOUND',
+        message: 'No se encontró una persona activa con ese documento.',
       });
     }
 
@@ -37,18 +30,20 @@ export class PersonsService {
       tipo_documento: person.tipo_documento,
       numero_documento: person.numero_documento,
       nombres: person.nombres,
-      correo: person.correo ?? "",
-      telefono: person.telefono ?? "",
+      correo: person.correo ?? '',
+      telefono: person.telefono ?? '',
       apellidos: person.apellidos,
       estado: person.status,
-      origen: ""
+      origen: '',
     };
   }
 
+  async findActiveByEmail(email: string): Promise<Person | null> {
+    return this.personsRepository.findActiveByEmail(email.trim());
+  }
+
   async findIdByDocument(document: string): Promise<string | null> {
-    const person = await this.personsRepository.findByDocument(
-      document.trim(),
-    );
+    const person = await this.personsRepository.findByDocument(document.trim());
 
     return person?.id ?? null;
   }
@@ -64,41 +59,27 @@ export class PersonsService {
     currentUser: CurrentUser,
   ): Promise<PersonResponseDto> {
     try {
-      const person =
-        await this.findActiveByDocument(document);
+      const person = await this.findActiveByDocument(document);
 
-      await this.auditService.success(
-        "PERSON_LOOKUP",
-        {
-          usuario: currentUser.id,
-          entidad: "PERSON", 
-        },
-      );
+      await this.auditService.success('PERSON_LOOKUP', {
+        usuario: currentUser.id,
+        entidad: 'PERSON',
+      });
 
       return person;
     } catch (error) {
-      await this.auditService.failure(
-        "PERSON_LOOKUP",
-        {
-          usuario: currentUser.id,
-          entidad: "PERSON",
-          resultado: "FALLIDO",
-          mensaje: "Consulta de persona fallida.",
-        },
-      );
+      await this.auditService.failure('PERSON_LOOKUP', {
+        usuario: currentUser.id,
+        entidad: 'PERSON',
+        mensaje: 'Consulta de persona fallida.',
+      });
 
       throw error;
     }
   }
 
-  private extractErrorCode(
-    error: unknown,
-  ): string {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "response" in error
-    ) {
+  private extractErrorCode(error: unknown): string {
+    if (typeof error === 'object' && error !== null && 'response' in error) {
       const response = (
         error as {
           response?: {
@@ -107,9 +88,9 @@ export class PersonsService {
         }
       ).response;
 
-      return response?.code ?? "UNKNOWN_ERROR";
+      return response?.code ?? 'UNKNOWN_ERROR';
     }
 
-    return "UNKNOWN_ERROR";
+    return 'UNKNOWN_ERROR';
   }
 }

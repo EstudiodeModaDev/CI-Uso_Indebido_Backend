@@ -1,0 +1,33 @@
+export interface invoice {
+  Tienda_CO: string;
+  NombreTienda: string;
+  NumeroFactura: number;
+  FechaFactura: string;
+  Estado: string;
+  OrigenVenta: string;
+  CedulaNitTerceroFactura: string | null;
+  TipoIdentificacion: string;
+  NombreTerceroFactura: string;
+  TelefonoCliente: string | null;
+  CelularCliente: string | null;
+  EmailCliente: string | null;
+  DireccionCliente: string | null;
+  CedulaCapturadaEnPOS: string;
+  NombreCompradorPOS: string;
+  TelefonoCompradorPOS: string;
+  CelularCompradorPOS: string;
+  EmailCompradorPOS: string;
+  Vendedor: string;
+  Cajero: string;
+  DocumentoReferencia: string | null;
+  Notas: string;
+  ValorBruto: string;
+  ValorDescuento: string;
+  ValorImpuestos: string;
+  ValorNeto: string;
+  ValorCartera: string;
+  CUFE: string | null;
+  ItemsVendidos: string[];
+  MediosPago: string;
+  RowidDocto: string;
+}

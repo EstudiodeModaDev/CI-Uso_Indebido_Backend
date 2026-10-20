@@ -1,5 +1,5 @@
 export class PersonResponseDto {
-  id!: string; 
+  id!: string;
   tipo_documento!: string;
   numero_documento!: string;
   nombres!: string;
@@ -7,5 +7,5 @@ export class PersonResponseDto {
   correo!: string;
   telefono!: string;
   estado!: string;
-  origen!: string
+  origen!: string;
 }
