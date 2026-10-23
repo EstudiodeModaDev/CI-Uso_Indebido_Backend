@@ -4,7 +4,7 @@
 
 ## 1. Resumen de la arquitectura
 
-Backend NestJS (TypeScript) desplegado en Render, actuando como capa de dominio y seguridad sobre una base de datos PostgreSQL en Supabase. Supabase Auth gestiona identidad y emisión de JWT; el backend **nunca** confía en el rol/claims que llegan desde el frontend, sino que los resuelve siempre contra las tablas `USUARIOS` / `USUARIOS_ROLES` usando la `service_role key` (que jamás sale del servidor).
+Backend NestJS (TypeScript) desplegado en servidor local, actuando como capa de dominio y seguridad sobre una base de datos PostgreSQL en Supabase. Supabase Auth gestiona identidad y emisión de JWT; el backend **nunca** confía en el rol/claims que llegan desde el frontend, sino que los resuelve siempre contra las tablas `USUARIOS` / `USUARIOS_ROLES` usando la `service_role key` (que jamás sale del servidor).
 
 Principios rectores:
 
@@ -21,7 +21,7 @@ Principios rectores:
 
 ```
 ┌─────────────────────┐        ┌──────────────────────────────────────────┐
-│   React + Vite       │        │              Render (NestJS)              │
+│   React + Vite       │        │       docker-apps · NestJS (Docker)       │
 │  (Frontend SPA)       │        │                                            │
 │                        │  JWT   │  ┌───────────┐   ┌─────────────────────┐ │
 │  Supabase Auth SDK ────┼───────►│  │ AuthGuard │──►│ RolesGuard           │ │
@@ -58,6 +58,8 @@ Principios rectores:
                                           │  auth.users (Supabase Auth) │
                                           └───────────────────────────┘
 ```
+
+El tráfico HTTPS del frontend llega al contenedor a través del proxy inverso Caddy del servidor; el detalle de la infraestructura está en la sección 19.
 
 ---
 
@@ -209,8 +211,6 @@ src/
 │   │   └── request-id.middleware.ts
 │   └── types/
 │       └── current-user.type.ts
-├── database/
-│   └── supabase-client.provider.ts   # provider único del SupabaseClient (service_role)
 ├── auth/
 │   ├── auth.module.ts
 │   ├── auth.service.ts
@@ -281,9 +281,6 @@ src/
     ├── health.module.ts
     └── health.controller.ts
 ```
-
-**Cambios respecto a la propuesta base:** se agrega `database/` (provider único del cliente Supabase inyectable, evita instanciarlo repetido por módulo) y se explicita `repositories/` dentro de cada módulo de dominio para dejar clara la separación service/repository. `users/` se mantiene delgado (solo resolución de usuario+roles, usado por `auth/`), separado de `persons/` (datos de negocio de la persona/cliente).
-
 ---
 
 ## 10. Explicación de cada módulo
@@ -504,13 +501,13 @@ interface SyncRunsRepository {
 
 | Opción | Evaluación |
 |---|---|
-| Cliente oficial de Supabase | ✅ Elegido. Cero configuración extra de conexión/pooling en Render, aprovecha RLS como defensa en profundidad si se decide usarlo también con `anon key` en algún caso, y es lo más simple de desplegar. |
-| Prisma | Viable, pero agrega generación de cliente, migraciones paralelas a las que ya gestiona Supabase, y un paso de build adicional en Render. Se puede migrar después si el dominio crece mucho. |
+| Cliente oficial de Supabase | ✅ Elegido. Cero configuración extra de conexión/pooling en el contenedor, aprovecha RLS como defensa en profundidad si se decide usarlo también con `anon key` en algún caso, y es lo más simple de desplegar. |
+| Prisma | Viable, pero agrega generación de cliente, migraciones paralelas a las que ya gestiona Supabase, y un paso de build adicional en la imagen Docker. Se puede migrar después si el dominio crece mucho. |
 | TypeORM | Mayor curva de "magia" (decoradores, lazy loading), más difícil de razonar en un dominio con reglas estrictas como OTP. |
 | Drizzle | Buena opción type-safe y ligera, pero añade una capa de definición de esquema paralela; con el esquema ya existente en Supabase, el costo de mantenerlo sincronizado no se justifica en esta fase. |
 | Acceso directo a `pg` | Máximo control, pero se pierde comodidad de RPC/Storage/Auth admin ya integrados en el SDK de Supabase. |
 
-**Justificación final:** el proyecto ya vive dentro del ecosistema Supabase (Auth, y potencialmente Storage/RPC a futuro). Usar el cliente oficial dentro de los repositorios (encapsulado, nunca inyectado directo en services) da simplicidad de despliegue en Render, evita mantener dos fuentes de verdad del esquema, y las interfaces de repositorio ya dejan la puerta abierta a cambiar de implementación (p. ej. a Drizzle) sin tocar los services si el proyecto crece.
+**Justificación final:** el proyecto ya vive dentro del ecosistema Supabase (Auth, y potencialmente Storage/RPC a futuro). Usar el cliente oficial dentro de los repositorios (encapsulado, nunca inyectado directo en services) da simplicidad de despliegue, evita mantener dos fuentes de verdad del esquema, y las interfaces de repositorio ya dejan la puerta abierta a cambiar de implementación (p. ej. a Drizzle) sin tocar los services si el proyecto crece.
 
 ---
 
@@ -594,7 +591,7 @@ generate(@CurrentUser() user: CurrentUserType, @Body() dto: GenerateOtpDto) { ..
 
 - **JWT de Supabase:** validado en cada request contra el proyecto de Supabase (JWKS o `auth.getUser` con `service_role`); se rechaza si expiró o la firma no corresponde.
 - **Guards:** `SupabaseAuthGuard` (autenticación) + `RolesGuard` (autorización), aplicados globalmente vía `APP_GUARD` con excepciones explícitas (`@Public()`) para `/health`.
-- **`SUPABASE_SERVICE_ROLE_KEY`:** solo en variables de entorno del backend en Render, nunca en el bundle de React, nunca en logs.
+- **`SUPABASE_SERVICE_ROLE_KEY`:** solo en el archivo de secretos del servidor (`/opt/<nombre-api>/.env`, permisos `600`), nunca en Git, nunca en el bundle de React, nunca en logs.
 - **Secretos:** todos vía variables de entorno, cargados y validados al boot (falla rápido si falta una obligatoria).
 - **Rate limiting:** `@nestjs/throttler` global + límites específicos por persona/tienda para `/otp/generate` y `/otp/validate` (ventana configurable vía `OTP_RATE_LIMIT_*`).
 - **Fuerza bruta:** contador de `intentos` persistido en `CODIGOS_OTP`, bloqueo tras `OTP_MAX_ATTEMPTS`; comparación de hash en tiempo constante.
@@ -611,41 +608,127 @@ generate(@CurrentUser() user: CurrentUserType, @Body() dto: GenerateOtpDto) { ..
 ## 18. Variables de entorno
 
 ```env
-NODE_ENV=                 # obligatoria, no secreta
-PORT=                     # obligatoria, no secreta
-FRONTEND_URL=             # obligatoria, no secreta (usada en CORS)
+NODE_ENV=               # obligatoria, no secreta
+PORT=                   # obligatoria, no secreta
+API_PREFIX=             # obligatoria, no secreta (usada en CORS)
 
-SUPABASE_URL=             # obligatoria, no secreta
-SUPABASE_PUBLISHABLE_KEY= # obligatoria, no secreta (uso backend opcional; equivalente a anon)
-SUPABASE_SERVICE_ROLE_KEY=# obligatoria, SECRETA — jamás en React/VITE_*
+FRONTEND_URL=           # obligatoria, no secreta
 
-OTP_SECRET=               # obligatoria, SECRETA
-OTP_EXPIRATION_MINUTES=   # obligatoria, no secreta (default 5)
-OTP_MAX_ATTEMPTS=         # obligatoria, no secreta
-OTP_RATE_LIMIT_MAX=       # obligatoria, no secreta
-OTP_RATE_LIMIT_WINDOW_MINUTES= # obligatoria, no secreta
+SUPABASE_URL=           # obligatoria, no secreta
+SUPABASE_SECRET_KEY=    # obligatoria, SECRETA
+OTP_SECRET=             # obligatoria, SECRETA
+OTP_EXPIRATION_MINUTES= # obligatoria, no secreta (default 5)
+OTP_MAX_ATTEMPTS=       # obligatoria, no secreta
 
-EMAIL_PROVIDER=           # obligatoria, no secreta (ej. "graph")
-EMAIL_FROM=               # obligatoria, no secreta
-EMAIL_API_KEY=            # obligatoria si aplica al proveedor, SECRETA (o credenciales OAuth de Graph: tenant/client id/secret)
+EMAIL_PROVIDER=         # obligatoria, no secreta (ej. "graph")
 
-SYNC_SECRET=              # obligatoria si hay endpoint manual, SECRETA
-YOU_DATABASE_URL=         # obligatoria, SECRETA
-THIRD_PARTY_DATABASE_URL= # obligatoria, SECRETA
+GRAPH_TENANT_ID=        # obligatoria, no secreta
+GRAPH_CLIENT_ID=        #obligatoria, no secreta
+GRAPH_CLIENT_SECRET=    # obligatoria, SECRETA
+
+GRAPH_MAIL_SENDER=      # obligatoria, no secreta
+OTP_ENCRYPTION_KEY=     # obligatoria, SECRETA
+
+//Invoice API
+INVOICE_API_URL=        # obligatoria, SECRETA
+CONNIKEY =              # obligatoria, SECRETA
+CONNITOKEN=             # obligatoria, SECRETA
 ```
 
 **Regla dura:** ninguna de estas variables debe tener prefijo `VITE_` ni existir en el `.env` de React. React solo necesita `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` (anon), ambas ya diseñadas por Supabase para ser públicas.
 
 ---
 
-## 19. Estrategia de despliegue en Render
+## 19. Estrategia de despliegue en servidor local (Docker + Azure DevOps)
 
-- **Web Service** de tipo Node, build `npm ci && npm run build`, start `node dist/main.js`.
-- Variables de entorno cargadas en el dashboard de Render (Environment Group compartido si hay múltiples servicios).
-- Health check configurado contra `/health` para que Render reinicie si el servicio no responde.
-- Autoscaling/instancia única en fase inicial (dado el volumen esperado); revisar plan pago para evitar cold starts si el uso es crítico en horario comercial.
-- Logs de Render + un sink adicional (ej. Logtail/Datadog) recomendado a futuro para correlacionar `requestId`.
-- CI simple: en cada push a `main`, Render dispara build/deploy automático; pruebas (`npm run test`) como gate previo en GitHub Actions antes de permitir merge.
+La API se despliega como contenedor Docker en el servidor on-premise `docker-apps` (IP privada `172.17.25.10`), siguiendo el estándar de TI: **Manual 1 · Configuración inicial del servidor de APIs** (servidor, agente, Caddy, dominio) y **Manual 2 · Estándar de despliegue de APIs** (procedimiento por API).
+
+### Infraestructura
+
+```
+ INTERNET (sin VPN)
+       │  https://compras.apis.estudiodemoda.co   (DNS GoDaddy → IP pública)
+       ▼
+ IP pública ──NAT 80/443──► 172.17.25.10
+       │
+ ┌──────────────────────────── docker-apps ─────────────────────────────┐
+ │  Caddy (80/443, modo host) ── HTTPS automático (Let's Encrypt)      │
+ │        │                                                             │
+ │        └──► 127.0.0.1:<HOST_PORT> ──► contenedor API (puerto 3000)  │
+ │                                                                      │
+ │  Agente Azure DevOps (pool OnPrem) ── docker compose build/up       │
+ │  Uptime Kuma (:3100, solo red interna) ── monitorea /api/health     │
+ └──────────────────────────────────────────────────────────────────────┘
+```
+
+| Elemento | Valor |
+|---|---|
+| Servidor | `docker-apps` · `172.17.25.10` · usuario `dockeradmin` |
+| CI/CD | Azure DevOps, organización `EDMTI`, proyecto `TI-Desarrollo`, agente self-hosted `docker-apps` en el pool `OnPrem` |
+| Tipo de API | **Pública**: la consume el frontend React desde el navegador de cada usuario sin VPN, por eso se publica a través de Caddy y nunca se expone directamente |
+| Publicación del puerto | `BIND_IP=127.0.0.1` (solo Caddy la alcanza) |
+| Puerto y subdominio | Según el registro de puertos del servidor (rango 3000–3099). Referencia actual: `3000` → `compras.apis.estudiodemoda.co` |
+| Proxy inverso | Caddy en `/opt/caddy`, un bloque por API con `import seguridad` y `reverse_proxy 127.0.0.1:<HOST_PORT>` |
+| Secretos | `/opt/<nombre-api>/.env` en el servidor (`chmod 600`, dueño `dockeradmin`), nunca en Git |
+
+### Flujo de despliegue
+
+```
+commit / merge a main ──► Azure Pipelines ──► agente docker-apps (OnPrem)
+   ──► docker compose build ──► docker compose up -d --remove-orphans
+   ──► espera estado "healthy" del contenedor (máx. 2 min) ──► docker image prune
+```
+
+1. Cada push a `main` dispara `azure-pipelines.yml`, que corre en el agente self-hosted del servidor (el agente se conecta hacia Azure DevOps; no se abren puertos).
+2. `docker compose build` construye la imagen con el `Dockerfile` multi-etapa (`node:22-alpine`): `npm ci` + `npm run build` + `npm prune --omit=dev`, y una etapa de runtime con solo `dist/`, `node_modules` y `package.json`, ejecutada como usuario `node`.
+3. La imagen se etiqueta con el número de build (`TAG=$(Build.BuildId)`), lo que deja versiones anteriores disponibles en `docker images`.
+4. `docker compose up -d` reemplaza el contenedor (corte de unos segundos), cargando los secretos desde `ENV_FILE=/opt/<nombre-api>/.env`.
+5. El pipeline espera a que el `HEALTHCHECK` de la imagen reporte `healthy`; si no ocurre en 2 minutos, falla y muestra los últimos logs.
+
+**No hay rollback automático**: si el despliegue falla, el contenedor anterior ya fue reemplazado. Para volver a una versión anterior se revierte el commit en `main` (Repos → Commits → Revert) y se deja correr el pipeline.
+
+### Archivos de despliegue (raíz del repositorio)
+
+| Archivo | Función |
+|---|---|
+| `Dockerfile` | Build multi-etapa y `HEALTHCHECK` contra `http://localhost:$PORT/$API_PREFIX/health` |
+| `.dockerignore` | Excluye `node_modules`, `dist`, `.env*`, `documents`, `test`, etc. del contexto de build |
+| `docker-compose.yml` | `name` e `image` únicos por API; `env_file: ${ENV_FILE}`; puerto `${BIND_IP}:${HOST_PORT}:3000`; `restart: unless-stopped` |
+| `azure-pipelines.yml` | Pool `OnPrem`; variables `TAG`, `ENV_FILE`, `HOST_PORT`, `BIND_IP`; pasos build → up → health → prune |
+
+Reglas:
+
+- El nombre `Dockerfile` debe respetar mayúsculas (el servidor Linux sí las distingue).
+- `name:` del compose en **minúsculas y guiones**, único en el servidor: si dos APIs comparten `name`, una reemplaza a la otra sin error.
+- El puerto interno del contenedor es siempre `3000`; lo que cambia por API es `HOST_PORT`.
+- `NODE_ENV` y `PORT` los fijan el `Dockerfile` y el compose; no van en el `.env` del servidor.
+- Esta API usa prefijo global (`API_PREFIX=api`, fijado en el `Dockerfile`), por lo que el health check y la documentación quedan en `/api/health` y `/api/docs`. Si se agrega `API_PREFIX` al `.env` con otro valor, el health check del contenedor deja de coincidir.
+- La especificación OpenAPI (`src/docs/openapi.yaml`) se copia a `dist/` como asset en el build, por lo que viaja dentro de la imagen.
+
+### Health check y monitoreo
+
+- `GET /api/health` es público (`@Public()`) y responde `200` si hay conexión con Supabase, o `503` si la base de datos no responde; el `HEALTHCHECK` de Docker (cada 30 s, timeout 5 s, 3 reintentos) marca el contenedor como `unhealthy` en ese caso.
+- Uptime Kuma (`http://172.17.25.10:3100`) consulta cada 60 s `http://127.0.0.1:<HOST_PORT>/api/health` y, una vez publicada, `https://compras.apis.estudiodemoda.co/api/health` con alerta de vencimiento de certificado; notifica al equipo por Teams o correo.
+- Logs: `docker logs -f <nombre-api>-api-1`, con rotación configurada en el daemon de Docker (`max-size 10m`, `max-file 3`). A futuro: Sentry para errores y Grafana Loki para logs centralizados.
+
+### Configuración y CORS
+
+- `FRONTEND_URL` en el `.env` del servidor debe ser el dominio real del frontend (nunca `localhost`).
+- Cambios en el `.env` se aplican **re-ejecutando el pipeline** (`docker restart` no relee el archivo).
+- Mientras Caddy opere con `local_certs` (sin DNS/NAT público confirmado por Redes), la API puede probarse dentro de la red con `curl.exe -k --resolve compras.apis.estudiodemoda.co:443:172.17.25.10 https://compras.apis.estudiodemoda.co/api/health`.
+
+### Operación
+
+| Necesito… | Cómo |
+|---|---|
+| Desplegar un cambio | Commit o merge a `main` |
+| Aplicar cambios del `.env` | Editar `/opt/<nombre-api>/.env` y **Run pipeline** |
+| Volver a una versión anterior | Revert del commit en `main` |
+| Ver logs / reiniciar | `docker logs -f <nombre-api>-api-1` · `docker restart <nombre-api>-api-1` |
+| Diagnosticar `unhealthy` | `docker inspect --format '{{json .State.Health}}' <nombre-api>-api-1` (Manual 2, sección 7) |
+| Estado del agente | `cd ~/azagent && sudo ./svc.sh status` |
+
+Pruebas (`npm run test`) y lint se recomiendan como validación de build en PR mediante *branch policies* de `main` en Azure Repos.
 
 ---
 
@@ -653,7 +736,7 @@ THIRD_PARTY_DATABASE_URL= # obligatoria, SECRETA
 
 - `@nestjs/schedule` con `@Cron()` en `SynchronizationScheduler`, expresión configurable por env (`SYNC_CRON_EXPRESSION`, ej. cada 6 horas).
 - Lock simple para evitar ejecuciones solapadas: antes de iniciar, verifica si existe una ejecución `EN_PROGRESO` reciente en `EJECUCIONES_SINCRONIZACION`; si existe y no ha expirado un timeout razonable, se omite el nuevo disparo.
-- Alternativa más robusta a futuro: mover el cron a un **Render Cron Job** separado (proceso independiente) en vez de vivir dentro del mismo proceso web, para no competir por recursos con el tráfico HTTP.
+- Alternativa más robusta a futuro: mover el cron a un **contenedor separado** en el mismo `docker-compose.yml` (proceso independiente, mismo `.env`) en vez de vivir dentro del mismo proceso web, para no competir por recursos con el tráfico HTTP.
 - Procesamiento por lotes con `UPSERT` idempotente (ver flujo de sincronización, sección 8).
 - Alertamiento: si `estado = FALLIDA` o `PARCIAL` con muchos errores, se registra en `LOG` con severidad alta para que `CONTROL_INTERNO` lo revise vía un endpoint de consulta de ejecuciones (`GET /admin/sync-runs`).
 
@@ -690,8 +773,6 @@ THIRD_PARTY_DATABASE_URL= # obligatoria, SECRETA
 9. `AuditModule` (integrado retroactivamente a los módulos anteriores).
 10. `ReportsModule`.
 11. `SynchronizationModule` (cron + fuentes YOU/terceros + UPSERT idempotente).
-12. Endurecimiento transversal: rate limiting, Helmet, CORS final, revisión de RLS recomendada, pruebas e2e completas, despliegue final en Render.
+12. Endurecimiento transversal: rate limiting, Helmet, CORS final, revisión de RLS recomendada, pruebas e2e completas, publicación final por Caddy con certificados públicos.
 
 ---
-
-*Fin del documento de arquitectura.*

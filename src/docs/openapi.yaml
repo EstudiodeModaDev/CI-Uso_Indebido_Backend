@@ -1,0 +1,1047 @@
+openapi: 3.0.3
+info:
+  title: API Compras y Descuentos
+  version: 0.0.1
+  description: |
+    Backend NestJS para la gestión de códigos OTP de autorización de descuentos.
+
+    **Autenticación.** Salvo los endpoints marcados como públicos, todas las rutas
+    requieren el `access_token` de Supabase Auth en el header
+    `Authorization: Bearer <token>`. El backend valida el token contra Supabase y
+    resuelve el usuario y sus roles desde las tablas `USUARIOS` / `USUARIOS_ROLES`;
+    el rol nunca se acepta como parámetro de entrada.
+
+    **Roles.**
+    - `TIENDA`: usuario asociado a una tienda (por correo en `TIENDAS`). Genera,
+      valida y redime códigos.
+    - `CONTROL_INTERNO`: usuario administrativo. Consulta el historial global y tiendas.
+
+    **Formato de errores.** Los errores de negocio responden con
+    `{ "code": "...", "message": "..." }` y, en algunos casos, campos adicionales.
+    Los errores de validación del body (`ValidationPipe`) responden con el formato
+    estándar de NestJS (`statusCode`, `message[]`, `error`). Los campos no declarados
+    en el body son rechazados (`forbidNonWhitelisted`).
+
+    **Errores de autenticación comunes** (cualquier ruta protegida):
+    `AUTH_TOKEN_MISSING`, `AUTH_TOKEN_INVALID`, `AUTH_EMAIL_NOT_FOUND`,
+    `USER_NOT_REGISTERED` (401); `USER_INACTIVE`, `USER_WITHOUT_ROLES`,
+    `INSUFFICIENT_PERMISSIONS`, `AUTH_USER_NOT_RESOLVED` (403).
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local (PORT=3000, API_PREFIX=api)
+  - url: '{baseUrl}/api'
+    description: Entorno desplegado
+    variables:
+      baseUrl:
+        default: Por definir
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Health
+    description: Estado del servicio
+  - name: Auth
+    description: Usuario autenticado
+  - name: OTP
+    description: Códigos de autorización de descuento
+  - name: OTP contraseña
+    description: Recuperación de contraseña por código enviado al correo
+  - name: Personas
+    description: Consulta de empleados/socios
+  - name: Tiendas
+    description: Tiendas registradas
+  - name: Facturas
+    description: Consulta de facturas en el sistema externo
+  - name: Correos
+    description: Utilidades de correo
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Verifica el estado del servicio y la conexión a la base de datos
+      security: []
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Servicio y base de datos disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResult'
+              example:
+                status: ok
+                database: ok
+                cause: ''
+                timestamp: '2026-10-23T15:00:00.000Z'
+        '503':
+          description: No fue posible conectar con la base de datos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/HealthResult'
+              example:
+                code: SERVICE_UNAVAILABLE
+                message: No fue posible conectar con la base de datos.
+                status: degraded
+                database: error
+                cause: fetch failed
+                timestamp: '2026-10-23T15:00:00.000Z'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Devuelve el usuario autenticado y sus roles
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Usuario resuelto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /otp/generate:
+    post:
+      tags: [OTP]
+      summary: Genera un código de descuento y lo envía al correo de la persona
+      description: |
+        Requiere un usuario con rol `TIENDA` asociado a una tienda activa (se valida
+        en el servicio). Invalida cualquier código pendiente previo de la persona.
+        Si la persona genera 4 o más códigos en el día se envía una alerta de
+        seguridad. El código nunca se retorna en la respuesta.
+      operationId: generateOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateOtpRequest'
+      responses:
+        '201':
+          description: Código generado y enviado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateOtpResponse'
+        '400':
+          description: |
+            Validación fallida o `PERSON_EMAIL_NOT_FOUND` (la persona no tiene correo).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`USER_IS_NOT_STORE`, `STORE_INACTIVE` u otro error de autorización'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: '`STORE_NOT_FOUND` o `PERSON_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: El código fue generado pero el correo no pudo enviarse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSendFailedError'
+
+  /otp/validate:
+    post:
+      tags: [OTP]
+      summary: Valida un código de descuento sin redimirlo
+      description: |
+        Rol requerido: `TIENDA`. Cada intento fallido incrementa el contador; al
+        alcanzar `OTP_MAX_ATTEMPTS` (por defecto 5) el código se bloquea y se
+        envía una alerta de seguridad.
+      operationId: validateOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateOtpRequest'
+      responses:
+        '201':
+          description: Código válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateOtpResponse'
+        '400':
+          $ref: '#/components/responses/OtpCheckFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/StoreForbidden'
+        '404':
+          description: '`STORE_NOT_FOUND`, `PERSON_NOT_FOUND` u `OTP_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /otp/redeem:
+    post:
+      tags: [OTP]
+      summary: Redime un código de descuento asociándolo a una compra
+      description: |
+        Rol requerido: `TIENDA`. Revalida el código y lo marca como `REDIMIDO`,
+        registrando la tienda de redención, el valor de la compra y el número de factura.
+      operationId: redeemOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemOtpRequest'
+      responses:
+        '201':
+          description: Código redimido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedeemOtpResponse'
+        '400':
+          $ref: '#/components/responses/OtpCheckFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/StoreForbidden'
+        '404':
+          description: '`STORE_NOT_FOUND`, `PERSON_NOT_FOUND` u `OTP_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: '`OTP_ALREADY_REDEEMED` — el código ya fue redimido'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /otp/history:
+    post:
+      tags: [OTP]
+      summary: Historial de códigos de una persona (público)
+      description: |
+        Endpoint público. El correo debe coincidir con el registrado para el
+        documento; de lo contrario responde `OTP_HISTORY_NOT_FOUND`.
+      security: []
+      operationId: otpHistoryPublic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicOtpHistoryRequest'
+      responses:
+        '201':
+          description: Historial de la persona
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OtpHistoryItem'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '404':
+          description: '`PERSON_NOT_FOUND` u `OTP_HISTORY_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /otp/history/internal:
+    post:
+      tags: [OTP]
+      summary: Historial de códigos de una persona (tienda)
+      description: Rol requerido `TIENDA` con tienda activa.
+      operationId: otpHistoryInternal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpHistoryRequest'
+      responses:
+        '201':
+          description: Historial de la persona
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OtpHistoryItem'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/StoreForbidden'
+        '404':
+          description: '`STORE_NOT_FOUND` o `PERSON_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /otp/history/admin:
+    post:
+      tags: [OTP]
+      summary: Historial global de códigos con filtros y paginación
+      description: |
+        Rol requerido: `CONTROL_INTERNO`. Si se filtra por un documento inexistente
+        responde una página vacía.
+      operationId: otpHistoryAdmin
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminOtpHistoryRequest'
+      responses:
+        '201':
+          description: Página de resultados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOtpHistoryPage'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /otp/generate-password:
+    post:
+      tags: [OTP contraseña]
+      summary: Solicita un código para cambiar la contraseña
+      description: |
+        Endpoint público. Responde siempre lo mismo para no revelar qué correos
+        están registrados. Límite: 3 códigos por persona cada 60 minutos.
+      security: []
+      operationId: generatePasswordOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordOtpRequest'
+      responses:
+        '201':
+          description: Solicitud procesada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratePasswordOtpResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /otp/validate-password:
+    post:
+      tags: [OTP contraseña]
+      summary: Valida el código de cambio de contraseña
+      description: |
+        Endpoint público. Si el código es válido devuelve un `tokenHash` de
+        recuperación de Supabase Auth, que el frontend canjea con
+        `supabase.auth.verifyOtp({ token_hash, type: 'recovery' })` para abrir
+        una sesión temporal y actualizar la contraseña. Cualquier fallo responde
+        el mismo error genérico `OTP_INVALID`.
+      security: []
+      operationId: validatePasswordOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidatePasswordOtpRequest'
+      responses:
+        '201':
+          description: Código válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidatePasswordOtpResponse'
+        '400':
+          description: Validación fallida u `OTP_INVALID`
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/ValidationError'
+              example:
+                code: OTP_INVALID
+                message: El código es inválido o ha expirado. Solicita uno nuevo.
+
+  /persons/{document}:
+    get:
+      tags: [Personas]
+      summary: Consulta una persona activa por número de documento
+      description: Roles requeridos `TIENDA` o `CONTROL_INTERNO`. La consulta queda auditada.
+      operationId: findPersonByDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentPath'
+      responses:
+        '200':
+          description: Persona encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '400':
+          description: '`INVALID_DOCUMENT_FORMAT`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`PERSON_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores/me:
+    get:
+      tags: [Tiendas]
+      summary: Devuelve la tienda asociada al usuario autenticado
+      description: El usuario debe tener rol `TIENDA` y su correo debe coincidir con una tienda activa.
+      operationId: getCurrentStore
+      responses:
+        '200':
+          description: Tienda del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Store'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/StoreForbidden'
+        '404':
+          description: '`STORE_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores:
+    get:
+      tags: [Tiendas]
+      summary: Lista todas las tiendas ordenadas por nombre
+      description: Rol requerido `CONTROL_INTERNO`. En este listado `code` siempre es `null`.
+      operationId: listStores
+      responses:
+        '200':
+          description: Tiendas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Store'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /invoice:
+    get:
+      tags: [Facturas]
+      summary: Consulta una factura en el sistema externo (Conni)
+      description: |
+        Requiere autenticación (cualquier rol). Siempre responde 200; si la
+        consulta externa falla, `ok` es `false` y `errorMessage` describe el error.
+        Los parámetros no se validan en el backend.
+      operationId: getInvoice
+      parameters:
+        - name: cedula
+          in: query
+          required: true
+          description: Cédula del comprador
+          schema:
+            type: string
+          example: '1020304050'
+        - name: factura
+          in: query
+          required: true
+          description: Número de factura
+          schema:
+            type: string
+          example: '123456'
+      responses:
+        '200':
+          description: Resultado de la consulta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /emails/test:
+    post:
+      tags: [Correos]
+      summary: Envía un correo de prueba al usuario autenticado
+      description: Rol requerido `CONTROL_INTERNO`.
+      operationId: sendTestEmail
+      responses:
+        '201':
+          description: Correo procesado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+              example:
+                success: true
+                message: Correo procesado correctamente.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: access_token emitido por Supabase Auth
+
+  parameters:
+    DocumentPath:
+      name: document
+      in: path
+      required: true
+      description: Número de documento (5 a 15 dígitos)
+      schema:
+        $ref: '#/components/schemas/Document'
+
+  responses:
+    Unauthorized:
+      description: Token ausente, inválido o usuario no registrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: AUTH_TOKEN_MISSING
+            message: Debe enviar un token de autenticación.
+    Forbidden:
+      description: Usuario inactivo, sin roles o sin permisos para la operación
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: INSUFFICIENT_PERMISSIONS
+            message: No tiene permisos para ejecutar esta operación.
+    StoreForbidden:
+      description: '`USER_IS_NOT_STORE`, `STORE_INACTIVE` u otro error de autorización'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: STORE_INACTIVE
+            message: La tienda se encuentra inactiva.
+    ValidationFailed:
+      description: El body no cumple las validaciones
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    OtpCheckFailed:
+      description: |
+        Validación fallida, o error del código:
+        `OTP_EXPIRED`, `OTP_INVALID` (incluye `remainingAttempts`) u `OTP_MAX_ATTEMPTS_REACHED`.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/OtpInvalidError'
+              - $ref: '#/components/schemas/ValidationError'
+          examples:
+            invalid:
+              value:
+                code: OTP_INVALID
+                message: El código ingresado no es válido.
+                remainingAttempts: 3
+            expired:
+              value:
+                code: OTP_EXPIRED
+                message: El código ha expirado.
+            blocked:
+              value:
+                code: OTP_MAX_ATTEMPTS_REACHED
+                message: El código fue bloqueado por superar el máximo de intentos.
+    InternalError:
+      description: Error consultando la base de datos o descifrando un código (`*_LOOKUP_FAILED`, `OTP_DECRYPT_FAILED`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    Document:
+      type: string
+      pattern: '^[0-9]{5,15}$'
+      example: '1020304050'
+
+    OtpCode:
+      type: string
+      pattern: '^[0-9]{6}$'
+      example: '483920'
+
+    OtpStatus:
+      type: string
+      enum: [PENDIENTE, REDIMIDO, EXPIRADO, ANULADO, BLOQUEADO]
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: PERSON_NOT_FOUND
+        message:
+          type: string
+          example: No se encontró una persona activa con ese documento.
+
+    ValidationError:
+      type: object
+      description: Error estándar de `ValidationPipe` de NestJS
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: array
+          items:
+            type: string
+          example: ['El documento debe contener entre 5 y 15 dígitos.']
+        error:
+          type: string
+          example: Bad Request
+
+    OtpInvalidError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            remainingAttempts:
+              type: integer
+              description: Solo presente con `OTP_INVALID`
+              example: 3
+
+    EmailSendFailedError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            otpGenerated:
+              type: boolean
+              example: true
+            expiresAt:
+              type: string
+              format: date-time
+      example:
+        code: EMAIL_SEND_FAILED
+        message: El código fue generado, pero no pudo enviarse por correo.
+        otpGenerated: true
+        expiresAt: '2026-10-23T15:05:00.000Z'
+
+    HealthResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        database:
+          type: string
+          enum: [ok, error]
+        cause:
+          type: string
+          description: Mensaje del error de base de datos; vacío si todo está bien
+        timestamp:
+          type: string
+          format: date-time
+
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: ID en `public.USUARIOS`
+          example: 12
+        auth_user_id:
+          type: string
+          format: uuid
+          description: ID en `auth.users` de Supabase
+        correo:
+          type: string
+          format: email
+        id_persona:
+          type: string
+          nullable: true
+          description: Null mientras el usuario no esté asociado a una persona
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [TIENDA, CONTROL_INTERNO]
+
+    GenerateOtpRequest:
+      type: object
+      required: [document]
+      additionalProperties: false
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+
+    GenerateOtpResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        expiresAt:
+          type: string
+          example: '2026-10-23T15:05:00.000Z'
+        maskedEmail:
+          type: string
+          example: ju****@estudiodemoda.com.co
+
+    ValidateOtpRequest:
+      type: object
+      required: [document, code]
+      additionalProperties: false
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        code:
+          $ref: '#/components/schemas/OtpCode'
+
+    ValidateOtpResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          example: true
+        remainingAttempts:
+          type: integer
+          example: 5
+        expiresAt:
+          type: string
+          example: '2026-10-23T15:05:00.000Z'
+
+    RedeemOtpRequest:
+      type: object
+      required: [document, code, purchaseValue, invoiceNumber]
+      additionalProperties: false
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        code:
+          $ref: '#/components/schemas/OtpCode'
+        purchaseValue:
+          type: number
+          minimum: 0.01
+          example: 189900
+        invoiceNumber:
+          type: number
+          example: 123456
+
+    RedeemOtpResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        redeemedAt:
+          type: string
+          format: date-time
+
+    OtpHistoryRequest:
+      type: object
+      required: [document]
+      additionalProperties: false
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+
+    PublicOtpHistoryRequest:
+      type: object
+      required: [document, email]
+      additionalProperties: false
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        email:
+          type: string
+          format: email
+
+    AdminOtpHistoryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        generationStoreId:
+          type: integer
+          description: Filtra por tienda donde se generó el código
+        redemptionStoreId:
+          type: integer
+          description: Filtra por tienda donde se redimió el código
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+
+    OtpHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+          description: Código descifrado
+          example: '483920'
+        status:
+          $ref: '#/components/schemas/OtpStatus'
+        generatedAt:
+          type: string
+        expiresAt:
+          type: string
+        redeemedAt:
+          type: string
+          nullable: true
+        purchaseValue:
+          type: number
+        generateIn:
+          type: string
+          description: Nombre de la tienda de generación
+        redeemIn:
+          type: string
+          nullable: true
+          description: Nombre de la tienda de redención
+        invoiceNumber:
+          type: number
+          nullable: true
+
+    AdminOtpHistoryItem:
+      allOf:
+        - $ref: '#/components/schemas/OtpHistoryItem'
+        - type: object
+          properties:
+            document:
+              type: string
+              example: '1020304050'
+            personName:
+              type: string
+              example: Juan Pérez
+
+    AdminOtpHistoryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOtpHistoryItem'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    ForgotPasswordOtpRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+
+    GeneratePasswordOtpResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Si el correo está registrado, recibirás un código de verificación.
+
+    ValidatePasswordOtpRequest:
+      type: object
+      required: [email, code]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          $ref: '#/components/schemas/OtpCode'
+
+    ValidatePasswordOtpResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          example: true
+        tokenHash:
+          type: string
+          description: Token de recuperación de Supabase Auth
+
+    Person:
+      type: object
+      properties:
+        id:
+          type: string
+        tipo_documento:
+          type: string
+          example: CC
+        numero_documento:
+          type: string
+          example: '1020304050'
+        nombres:
+          type: string
+        apellidos:
+          type: string
+        correo:
+          type: string
+          description: Vacío si no tiene correo registrado
+        telefono:
+          type: string
+          description: Vacío si no tiene teléfono registrado
+        estado:
+          type: string
+          example: ACTIVO
+        origen:
+          type: string
+          description: Actualmente siempre vacío
+
+    Store:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+          nullable: true
+        email:
+          type: string
+        status:
+          type: boolean
+          nullable: true
+          description: true si la tienda está activa
+
+    InvoiceResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        data:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Invoice'
+        errorMessage:
+          type: string
+          description: Solo presente cuando `ok` es false
+
+    Invoice:
+      type: object
+      description: Respuesta del sistema externo de facturación
+      properties:
+        Tienda_CO: { type: string }
+        NombreTienda: { type: string }
+        NumeroFactura: { type: number }
+        FechaFactura: { type: string }
+        Estado: { type: string }
+        OrigenVenta: { type: string }
+        CedulaNitTerceroFactura: { type: string, nullable: true }
+        TipoIdentificacion: { type: string }
+        NombreTerceroFactura: { type: string }
+        TelefonoCliente: { type: string, nullable: true }
+        CelularCliente: { type: string, nullable: true }
+        EmailCliente: { type: string, nullable: true }
+        DireccionCliente: { type: string, nullable: true }
+        CedulaCapturadaEnPOS: { type: string }
+        NombreCompradorPOS: { type: string }
+        TelefonoCompradorPOS: { type: string }
+        CelularCompradorPOS: { type: string }
+        EmailCompradorPOS: { type: string }
+        Vendedor: { type: string }
+        Cajero: { type: string }
+        DocumentoReferencia: { type: string, nullable: true }
+        Notas: { type: string }
+        ValorBruto: { type: string }
+        ValorDescuento: { type: string }
+        ValorImpuestos: { type: string }
+        ValorNeto: { type: string }
+        ValorCartera: { type: string }
+        CUFE: { type: string, nullable: true }
+        ItemsVendidos:
+          type: array
+          items: { type: string }
+        MediosPago: { type: string }
+        RowidDocto: { type: string }
+
+    SuccessMessage:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string

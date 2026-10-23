@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { load } from 'js-yaml';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
@@ -33,6 +37,16 @@ async function bootstrap(): Promise<void> {
       },
     }),
   );
+
+  /*
+   * La especificación se mantiene a mano en src/docs/openapi.yaml
+   * y Nest la copia a dist como asset (ver nest-cli.json).
+   */
+  const openApiDocument = load(
+    readFileSync(join(__dirname, 'docs', 'openapi.yaml'), 'utf8'),
+  ) as OpenAPIObject;
+
+  SwaggerModule.setup(`${apiPrefix}/docs`, app, openApiDocument);
 
   await app.listen(port);
 
